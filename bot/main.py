@@ -1,12 +1,10 @@
 from aiogram import Bot, Dispatcher
-from asyncio import run
 from aiogram.types import BotCommand
 from aiogram.filters import Command
 from handlers.start_handler import start_answer
 from handlers.help_handler import help_answer
 from functions.utility import menu_handler
 
-import functions  # functions.py faylini import qilish
 
 dp = Dispatcher()
 
@@ -33,4 +31,4 @@ async def start():
     ])
     await dp.start_polling(bot, polling_timeout=1)
 
-run(start())
+
