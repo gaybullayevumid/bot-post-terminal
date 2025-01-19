@@ -3,7 +3,10 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 # Asosiy menyu tugmasi
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="Накладные")]
+        [
+            KeyboardButton(text="Регистрация"),
+            KeyboardButton(text="Накладные")
+         ]
     ],
     resize_keyboard=True
 )
