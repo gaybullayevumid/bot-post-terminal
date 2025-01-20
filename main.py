@@ -6,8 +6,9 @@ from handlers.help import help_answer
 from functions.utility import menu_handler
 from data.config import BOT_TOKEN, ADMINS, IP
 from asyncio import run
+from utils.db_api.postgresql import add_user
 
-
+bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
 async def startup_answer(bot: Bot):
@@ -26,7 +27,7 @@ async def start():
 
     dp.shutdown.register(shutdown_answer)
 
-    bot = Bot(BOT_TOKEN)
+
     await bot.set_my_commands([
         BotCommand(command='/start', description='Botni ishga tushirish.'),
         BotCommand(command='/help', description='Yordam.')
