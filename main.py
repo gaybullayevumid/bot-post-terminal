@@ -5,6 +5,7 @@ from handlers.start import start_answer
 from handlers.help import help_answer
 from functions.utility import menu_handler
 from data.config import BOT_TOKEN, ADMINS, IP
+from asyncio import run
 
 
 dp = Dispatcher()
@@ -33,3 +34,4 @@ async def start():
     await dp.start_polling(bot, polling_timeout=1)
 
 
+run(start())
