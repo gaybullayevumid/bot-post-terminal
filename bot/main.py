@@ -1,8 +1,8 @@
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 from aiogram.filters import Command
-from handlers.start_handler import start_answer
-from handlers.help_handler import help_answer
+from handlers.start import start_answer
+from handlers.help import help_answer
 from functions.utility import menu_handler
 
 
