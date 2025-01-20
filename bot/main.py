@@ -4,6 +4,7 @@ from aiogram.filters import Command
 from handlers.start import start_answer
 from handlers.help import help_answer
 from functions.utility import menu_handler
+from data.config import BOT_TOKEN, ADMINS, IP
 
 
 dp = Dispatcher()
@@ -24,7 +25,7 @@ async def start():
 
     dp.shutdown.register(shutdown_answer)
 
-    bot = Bot("7769778979:AAFNG8nuj0m2rbWbJFHz8Jb2-FHS_Bv5qIc")
+    bot = Bot(BOT_TOKEN)
     await bot.set_my_commands([
         BotCommand(command='/start', description='Botni ishga tushirish.'),
         BotCommand(command='/help', description='Yordam.')
