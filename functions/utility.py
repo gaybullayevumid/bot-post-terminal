@@ -1,5 +1,5 @@
 from aiogram.types import Message
-from keyboards.main_keyboard import *
+from keyboards.default.menu_keyboard import *
 
 # menu_handler funksiyasi
 async def menu_handler(message: Message):

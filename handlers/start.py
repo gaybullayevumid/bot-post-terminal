@@ -1,6 +1,6 @@
 from aiogram import Bot
 from aiogram.types import Message
-from keyboards.main_keyboard import main_keyboard
+from keyboards.default.menu_keyboard import main_keyboard
 
 
 # start_answer funksiyasi aniqlanadi
