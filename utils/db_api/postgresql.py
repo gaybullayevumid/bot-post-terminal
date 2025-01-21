@@ -9,6 +9,31 @@ def get_db_connection():
         host=DB_CONFIG["host"]
     )
 
+def owner_phone(phone_number):
+    global cursor, conn
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+                INSERT INTO owner_phone(phone)
+                VALUES %s
+                ON CONFLICT (phone) DO NOTHING
+            """, (phone_number))
+
+        conn.commit()
+    except Exception as error:
+        print(error)
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+
 def add_user(telegram_id, username):
     connect = get_db_connection()
     cursor = connect.cursor()

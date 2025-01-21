@@ -6,7 +6,10 @@ main_keyboard = ReplyKeyboardMarkup(
         [
             KeyboardButton(text="Регистрация"),
             KeyboardButton(text="Накладные")
-         ]
+        ],
+        [
+            KeyboardButton(text="☎️Контакты")
+        ]
     ],
     resize_keyboard=True
 )
@@ -18,7 +21,7 @@ delivery_notes = ReplyKeyboardMarkup(
         [KeyboardButton(text="Апрель"), KeyboardButton(text="Май"), KeyboardButton(text="Июнь")],
         [KeyboardButton(text="Июль"), KeyboardButton(text="Август"), KeyboardButton(text="Сентябрь")],
         [KeyboardButton(text="Октябрь"), KeyboardButton(text="Ноябрь"), KeyboardButton(text="Декабрь")],
-        [KeyboardButton(text="Главный меню")]  # Orqaga qaytish tugmasi
+        [KeyboardButton(text="Главное меню")]  # Orqaga qaytish tugmasi
     ],
     resize_keyboard=True
 )
