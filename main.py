@@ -1,11 +1,13 @@
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, F
 from aiogram.types import BotCommand
 from aiogram.filters import Command
 from handlers.start import start_answer
 from handlers.help import help_answer
-from functions.utility import menu_handler, delivery_notes
+from functions.utility import menu_handler
 from data.config import BOT_TOKEN, ADMINS, IP
 from asyncio import run
+
+from utils.db_api.postgresql import export_to_excel
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
@@ -22,8 +24,10 @@ async def start():
     dp.message.register(start_answer, Command("start"))
     dp.message.register(help_answer, Command("help"))
     dp.message.register(menu_handler, lambda message: message.text in ["Накладные", "Главное меню"])
-    # dp.message.register(delivery_notes, lambda message: message.text in ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-    # "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"])
+    dp.message.register(export_to_excel, F.text.in_([
+        "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+        "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+    ]))
 
     dp.shutdown.register(shutdown_answer)
 
