@@ -6,7 +6,6 @@ from handlers.help import help_answer
 from functions.utility import menu_handler, ask_phone_number
 from data.config import BOT_TOKEN, ADMINS, IP
 from asyncio import run
-from utils.db_api.postgresql import add_user
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
@@ -20,7 +19,6 @@ async def shutdown_answer(bot: Bot):
 async def start():
     dp.startup.register(startup_answer)
 
-    # functions.py dan start_answer va help_answer funksiyalarini chaqiramiz
     dp.message.register(start_answer, Command("start"))
     dp.message.register(help_answer, Command("help"))
     dp.message.register(menu_handler, lambda message: message.text in ["Накладные", "Главное меню", "☎️Контакты"])
@@ -30,8 +28,8 @@ async def start():
 
 
     await bot.set_my_commands([
-        BotCommand(command='/start', description='Botni ishga tushirish.'),
-        BotCommand(command='/help', description='Yordam.')
+        BotCommand(command='/start', description='Запуск бота.'),
+        BotCommand(command='/help', description='Помощь.')
     ])
     await dp.start_polling(bot, polling_timeout=1)
 

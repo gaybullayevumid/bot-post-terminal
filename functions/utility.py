@@ -1,13 +1,8 @@
 from aiogram.types import Message, ReplyKeyboardRemove
 from keyboards.default.menu_keyboard import *
 from utils.db_api.postgresql import owner_phone
-import openpyxl
-import psycopg2
-from data.config import DB_CONFIG
-# from utils.db_api.postgresql import add_user
 
 
-# menu_handler funksiyasi
 async def menu_handler(message: Message):
     if message.text == "Накладные":
         await message.answer("Выберите месяц:", reply_markup=delivery_notes)
