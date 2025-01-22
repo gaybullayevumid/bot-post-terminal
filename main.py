@@ -3,7 +3,7 @@ from aiogram.types import BotCommand
 from aiogram.filters import Command
 from handlers.start import start_answer
 from handlers.help import help_answer
-from functions.utility import menu_handler, ask_phone_number
+from functions.utility import menu_handler
 from data.config import BOT_TOKEN, ADMINS, IP
 from asyncio import run
 
@@ -21,8 +21,7 @@ async def start():
 
     dp.message.register(start_answer, Command("start"))
     dp.message.register(help_answer, Command("help"))
-    dp.message.register(menu_handler, lambda message: message.text in ["Накладные", "Главное меню", "☎️Контакты"])
-    dp.message.register(ask_phone_number, lambda message: message.text in ["☎️Контакты"])
+    dp.message.register(menu_handler, lambda message: message.text in ["Накладные", "Главное меню"])
 
     dp.shutdown.register(shutdown_answer)
 

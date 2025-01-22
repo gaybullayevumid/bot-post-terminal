@@ -3,7 +3,7 @@ from aiogram.types import Message
 
 async def help_answer(message: Message, bot: Bot):
     matn = """
-        <b>Bot buyruqlari:</b>
+        <b>Команды бота:</b>
 
     /start - Запуск бота
     /help - Помощь!

@@ -5,9 +5,6 @@ main_keyboard = ReplyKeyboardMarkup(
         [
             KeyboardButton(text="Регистрация"),
             KeyboardButton(text="Накладные")
-        ],
-        [
-            KeyboardButton(text="☎️Контакты")
         ]
     ],
     resize_keyboard=True
