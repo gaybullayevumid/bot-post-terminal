@@ -1,1 +1,0 @@
-# avto_lider_bot
