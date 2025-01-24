@@ -43,7 +43,7 @@ months = [
 
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="Registration"), KeyboardButton(text="Delivery Notes")]
+        [KeyboardButton(text="Регистрация"), KeyboardButton(text="Накладные")]
     ],
     resize_keyboard=True
 )
@@ -54,7 +54,7 @@ delivery_notes = ReplyKeyboardMarkup(
         [KeyboardButton(text="April"), KeyboardButton(text="May"), KeyboardButton(text="June")],
         [KeyboardButton(text="July"), KeyboardButton(text="August"), KeyboardButton(text="September")],
         [KeyboardButton(text="October"), KeyboardButton(text="November"), KeyboardButton(text="December")],
-        [KeyboardButton(text="Main Menu")]
+        [KeyboardButton(text="Главное меню")]
     ],
     resize_keyboard=True
 )
@@ -87,7 +87,7 @@ def export_to_excel(month_name: str):
 
             df = pd.DataFrame(data, columns=["ID", "Description", "Amount", "Price", "CreatedAt", "Month", "TotalAmount"])
 
-            file_path = f"delivery_notes_{month_name}.xlsx"
+            file_path = f"накладные_{month_name}.xlsx"
             df.to_excel(file_path, index=False)
 
             cursor.close()
@@ -104,10 +104,10 @@ def export_to_excel(month_name: str):
 
 
 async def startup_answer(bot: Bot):
-    await bot.send_message(5323321097, "The bot has started its work. ✅")
+    await bot.send_message(5323321097, "Бот начал работу. ✅")
 
 async def shutdown_answer(bot: Bot):
-    await bot.send_message(5323321097, "The bot has stopped its work ❌")
+    await bot.send_message(5323321097, "Бот завершил работу ❌")
 
 async def start_answer(message: Message):
     await message.answer(
@@ -117,23 +117,23 @@ async def start_answer(message: Message):
     )
 
 async def help_answer(message: Message):
-    matn = """
-        <b>Bot commands:</b>
+    text = """
+        <b>Команды бота:</b>
 
-    /start - Start the bot
-    /help - Help!
+    /start - Запустить бота
+    /help - Помощь!
     """
-    await message.answer(matn, parse_mode='HTML')
+    await message.answer(text, parse_mode='HTML')
 
 async def menu_handler(message: Message):
     if message.text in month_mapping:
-        await message.answer(f"You selected {message.text} month.")
-    elif message.text == "Delivery Notes":
-        await message.answer("Select a month:", reply_markup=delivery_notes)
-    elif message.text == "Main Menu":
-        await message.answer("Select an action:", reply_markup=main_keyboard)
+        await message.answer(f"Вы выбрали месяц {message.text}")
+    elif message.text == "Накладные":
+        await message.answer("Выберите месяц:", reply_markup=delivery_notes)
+    elif message.text == "Главное меню":
+        await message.answer("Выберите действие:", reply_markup=main_keyboard)
     else:
-        await message.answer("Error!", reply_markup=main_keyboard)
+        await message.answer("Ошибка!", reply_markup=main_keyboard)
 
 
 # async def month_handler(message: Message):
@@ -176,7 +176,6 @@ async def month_handler(message: Message):
     if message.text in months:
         month_name = message.text.strip().capitalize()
 
-        # await message.reply(f"Loading data for {month_name} month, please wait...")
 
         file_path = export_to_excel(month_name)
 
@@ -184,25 +183,25 @@ async def month_handler(message: Message):
             try:
                 document = FSInputFile(file_path)
                 await message.bot.send_document(chat_id=message.chat.id, document=document)
-                logging.info(f"File for {month_name} month has been sent!")
+                logging.info(f"Файл за месяц {month_name} отправлен!")
             except Exception as e:
-                await message.reply(f"An error occurred while sending the file: {e}")
+                await message.reply(f"Произошла ошибка при отправке файла: {e}")
         else:
-            await message.reply("Sorry, an error occurred while loading the data.")
+            await message.reply("Извините, произошла ошибка при загрузке данных.")
 
 async def start():
     dp.startup.register(startup_answer)
 
     dp.message.register(start_answer, Command("start"))
     dp.message.register(help_answer, Command("help"))
-    dp.message.register(menu_handler, F.text.in_(["Delivery Notes", "Main Menu", "111"]))
+    dp.message.register(menu_handler, F.text.in_(["Накладные", "Главное меню"]))
     dp.message.register(month_handler, F.text.in_(months))
 
     dp.shutdown.register(shutdown_answer)
 
     await bot.set_my_commands([
-        BotCommand(command='/start', description='Start the bot.'),
-        BotCommand(command='/help', description='Help.')
+        BotCommand(command='/start', description='Запустить бота.'),
+        BotCommand(command='/help', description='Помощь.')
     ])
     await dp.start_polling(bot, polling_timeout=1)
 
