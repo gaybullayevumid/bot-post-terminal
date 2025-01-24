@@ -28,4 +28,4 @@ class CompanyList(models.Model):
     company = models.OneToOneField(Company, on_delete=models.CASCADE, related_name='company_list')
 
     def __str__(self):
-        return f"Company List for {self.company.name}"
+        return f"Список компаний для {self.company.name}"
