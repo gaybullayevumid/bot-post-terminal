@@ -21,14 +21,26 @@ months = [
 keyboards = {
     "main": ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Регистрация"), KeyboardButton(text="Накладные")]
+            [KeyboardButton(text="Регистрация")]
         ],
         resize_keyboard=True
     ),
     "months": ReplyKeyboardMarkup(
-        keyboard=[
+        keyboard=[ 
             [KeyboardButton(text=m) for m in months[i:i+3]] for i in range(0, 12, 3)
         ] + [[KeyboardButton(text="Главное меню")]],
+        resize_keyboard=True
+    ),
+    "registration_complete": ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Накладные")]
+        ],
+        resize_keyboard=True
+    ),
+    "request_contact": ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Отправить номер телефона", request_contact=True)]
+        ],
         resize_keyboard=True
     ),
 }
@@ -62,10 +74,17 @@ def export_to_excel(month_name):
         return None
 
 async def menu_handler(message: Message):
-    if message.text == "Накладные":
+    if message.text == "Регистрация":
+        await message.answer("Пожалуйста, отправьте свой номер телефона.", reply_markup=keyboards["request_contact"])
+    elif message.text == "Накладные":
         await message.answer("Выберите месяц:", reply_markup=keyboards["months"])
     elif message.text == "Главное меню":
         await message.answer("Выберите действие:", reply_markup=keyboards["main"])
+
+async def handle_contact(message: Message):
+    if message.contact:
+        phone_number = message.contact.phone_number
+        await message.answer(f"Ваш номер телефона: {phone_number} зарегистрирован.", reply_markup=keyboards["registration_complete"])
 
 async def month_handler(message: Message):
     file_path = export_to_excel(message.text)
@@ -85,7 +104,8 @@ async def start():
         lambda msg: msg.answer("Добро пожаловать!", reply_markup=keyboards["main"]),
         Command("start")
     )
-    dp.message.register(menu_handler, F.text.in_(["Накладные", "Главное меню"]))
+    dp.message.register(menu_handler, F.text.in_(["Накладные", "Главное меню", "Регистрация"]))
+    dp.message.register(handle_contact, F.contact)
     dp.message.register(month_handler, F.text.in_(months))
 
     await dp.start_polling(bot)
