@@ -176,7 +176,7 @@ async def month_handler(message: Message):
     if message.text in months:
         month_name = message.text.strip().capitalize()
 
-        await message.reply(f"Loading data for {month_name} month, please wait...")
+        # await message.reply(f"Loading data for {month_name} month, please wait...")
 
         file_path = export_to_excel(month_name)
 
