@@ -20,27 +20,29 @@ months = [
 
 keyboards = {
     "main": ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Регистрация")]
-        ],
+        keyboard=[[KeyboardButton(text="Регистрация")]],
         resize_keyboard=True
     ),
     "months": ReplyKeyboardMarkup(
-        keyboard=[ 
+        keyboard=[
             [KeyboardButton(text=m) for m in months[i:i+3]] for i in range(0, 12, 3)
         ] + [[KeyboardButton(text="Главное меню")]],
         resize_keyboard=True
     ),
     "registration_complete": ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Накладные")]
-        ],
+            [KeyboardButton(text="Накладные")],
+            [
+                KeyboardButton(text="📊Акт Сверка (СУМ)"),
+                KeyboardButton(text="📊Акт Сверка (USD)"),
+                KeyboardButton(text="☎️Контакты")
+            ],
+            [KeyboardButton(text="📜О компании")]
+            ],
         resize_keyboard=True
     ),
     "request_contact": ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Отправить номер телефона", request_contact=True)]
-        ],
+        keyboard=[[KeyboardButton(text="Отправить номер телефона", request_contact=True)]],
         resize_keyboard=True
     ),
 }
@@ -79,7 +81,7 @@ async def menu_handler(message: Message):
     elif message.text == "Накладные":
         await message.answer("Выберите месяц:", reply_markup=keyboards["months"])
     elif message.text == "Главное меню":
-        await message.answer("Выберите действие:", reply_markup=keyboards["main"])
+        await message.answer("Выберите действие:", reply_markup=keyboards["registration_complete"])
 
 async def handle_contact(message: Message):
     if message.contact:
@@ -94,6 +96,15 @@ async def month_handler(message: Message):
     else:
         await message.reply("Произошла ошибка при экспорте данных.")
 
+async def help_handler(message: Message):
+    await message.answer(
+        "Это бот для регистрации и экспорта данных.\n"
+        "Доступные команды:\n"
+        "/start - Запустить бота\n"
+        "/help - Получить помощь\n"
+        "Вы также можете использовать кнопки для взаимодействия."
+    )
+
 async def start():
     await bot.set_my_commands([
         BotCommand(command="/start", description="Запустить бота"),
@@ -104,6 +115,7 @@ async def start():
         lambda msg: msg.answer("Добро пожаловать!", reply_markup=keyboards["main"]),
         Command("start")
     )
+    dp.message.register(help_handler, Command("help"))  # Qo'shimcha: /help komandasi ro'yxatga olindi
     dp.message.register(menu_handler, F.text.in_(["Накладные", "Главное меню", "Регистрация"]))
     dp.message.register(handle_contact, F.contact)
     dp.message.register(month_handler, F.text.in_(months))
@@ -112,3 +124,4 @@ async def start():
 
 if __name__ == "__main__":
     run(start())
+
