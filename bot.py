@@ -9,30 +9,24 @@ import pandas as pd
 import django
 from asgiref.sync import sync_to_async
 
-# Django setup
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from base.models import Company
 
-# Bot configuration
 BOT_TOKEN = "7769778979:AAFNG8nuj0m2rbWbJFHz8Jb2-FHS_Bv5qIc"
 DB_CONFIG = {"dbname": "avtolider", "user": "postgres", "password": "8505", "host": "localhost", "port": "5432"}
 
-# Initialize bot and dispatcher
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Define months
 months = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
 ]
 
-# Keyboards
 keyboards = {
     "main": ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Регистрация")]],
@@ -62,7 +56,6 @@ keyboards = {
     ),
 }
 
-# Export data to Excel
 async def export_to_excel(month_name):
     try:
         logging.info(f"Exporting data for month: {month_name}")
@@ -94,25 +87,23 @@ async def export_to_excel(month_name):
         logging.error(f"Error exporting data: {e}")
         return None
 
-# Normalize phone number format
+
 def normalize_phone_number(phone_number):
     phone_number = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-    if phone_number.startswith("998"):  # Agar xalqaro kodsiz kelgan bo'lsa
+    if phone_number.startswith("998"):
         phone_number = "+" + phone_number
-    elif not phone_number.startswith("+998"):  # Agar boshqa formatda kelsa
+    elif not phone_number.startswith("+998"):
         phone_number = "+998" + phone_number.lstrip("5789")
     return phone_number
 
 
-# Check company in database and add telegram_id
 @sync_to_async
 def check_company(phone_number, telegram_id):
     logging.info(f"Checking company for phone number: {phone_number}")
 
-    # Faqat mavjud kompaniyani tekshirish
     try:
         company = Company.objects.get(phone_number=phone_number)
-        company.telegram_id = telegram_id  # Telegram ID ni yangilash
+        company.telegram_id = telegram_id
         company.save()
         logging.info(f"Telegram ID updated for company: {company.name}")
         return company
@@ -122,7 +113,6 @@ def check_company(phone_number, telegram_id):
 
 
 
-# Handlers
 async def menu_handler(message: Message):
     logging.info(f"Menu handler triggered with text: {message.text}")
     if message.text == "Регистрация":
@@ -134,21 +124,17 @@ async def menu_handler(message: Message):
 
 async def handle_contact(message: Message):
     if message.contact:
-        # Telefon raqamni formatlash
         phone_number = normalize_phone_number(message.contact.phone_number)
         logging.info(f"Received phone number: {phone_number}")
 
-        # Kompaniyani tekshirish va telegram_id ni yangilash
         company = await check_company(phone_number, message.from_user.id)
 
         if company:
-            # Kompaniya topilsa, xabar yuborish
             await message.answer(
                 f"Ваш номер {phone_number} успешно зарегистрирован. Добро пожаловать!",
                 reply_markup=keyboards["registration_complete"]
             )
         else:
-            # Telefon raqam bazada topilmasa, xabar yuborish
             await message.answer(
                 "Ваш номер телефона не найден в базе данных. Пожалуйста, свяжитесь с администрацией."
             )
@@ -173,7 +159,6 @@ async def help_handler(message: Message):
         "Вы также можете использовать кнопки для взаимодействия."
     )
 
-# Bot start
 async def start():
     logging.info("Starting bot...")
     await bot.set_my_commands([ 
