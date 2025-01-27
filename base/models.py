@@ -16,18 +16,11 @@ class Company(models.Model):
 
     @staticmethod
     def normalize_phone_number(phone_number):
-        # Telefon raqamni +998 formatga o'tkazish
         phone_number = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-        if phone_number.startswith("5"):  # 8 bilan boshlansa, +998 ga almashtirish
-            phone_number = "+998" + phone_number[0:]
-        elif phone_number.startswith("7"):
-            phone_number = "+998" + phone_number[0:]
-        elif phone_number.startswith("8"):
-            phone_number = "+998" + phone_number[0:]
-        elif phone_number.startswith("9"):
-            phone_number = "+998" + phone_number[0:]
-        elif not phone_number.startswith("+998"):
-            phone_number = "+998" + phone_number
+        if phone_number.startswith("998"):  # Agar xalqaro kodsiz kelgan bo'lsa
+            phone_number = "+" + phone_number
+        elif not phone_number.startswith("+998"):  # Agar boshqa formatda kelsa
+            phone_number = "+998" + phone_number.lstrip("5789")
         return phone_number
     
 

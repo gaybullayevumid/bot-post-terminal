@@ -97,32 +97,29 @@ async def export_to_excel(month_name):
 # Normalize phone number format
 def normalize_phone_number(phone_number):
     phone_number = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-    if phone_number.startswith("5"):  # Agar 8 bilan boshlansa, +998 ga almashtirish
-        phone_number = "+998" + phone_number[0:]
-    elif phone_number.startswith("7"):
-        phone_number = "+998" + phone_number[0:]
-    elif phone_number.startswith("8"):
-        phone_number = "+998" + phone_number[0:]
-    elif phone_number.startswith("9"):
-        phone_number = "+998" + phone_number[0:]
-    elif not phone_number.startswith("+998"):
-        phone_number = "+998" + phone_number
+    if phone_number.startswith("998"):  # Agar xalqaro kodsiz kelgan bo'lsa
+        phone_number = "+" + phone_number
+    elif not phone_number.startswith("+998"):  # Agar boshqa formatda kelsa
+        phone_number = "+998" + phone_number.lstrip("5789")
     return phone_number
 
 
 # Check company in database and add telegram_id
 @sync_to_async
-def check_and_add_company(phone_number, telegram_id):
+def check_company(phone_number, telegram_id):
     logging.info(f"Checking company for phone number: {phone_number}")
-    company = Company.objects.filter(phone_number=phone_number).first()
-    
-    if company:
+
+    # Faqat mavjud kompaniyani tekshirish
+    try:
+        company = Company.objects.get(phone_number=phone_number)
         company.telegram_id = telegram_id  # Telegram ID ni yangilash
         company.save()
-        logging.info(f"Company found and Telegram ID updated: {company}")
-    else:
-        logging.info("Company not found")
-    return company
+        logging.info(f"Telegram ID updated for company: {company.name}")
+        return company
+    except Company.DoesNotExist:
+        logging.warning(f"Company with phone number {phone_number} not found.")
+        return None
+
 
 
 # Handlers
@@ -137,24 +134,25 @@ async def menu_handler(message: Message):
 
 async def handle_contact(message: Message):
     if message.contact:
-        # Foydalanuvchidan kelgan telefon raqamni formatlash
+        # Telefon raqamni formatlash
         phone_number = normalize_phone_number(message.contact.phone_number)
         logging.info(f"Received phone number: {phone_number}")
 
-        # Bazadagi kompaniyani tekshirish va telegram_id qo'shish
-        company = await check_and_add_company(phone_number, message.from_user.id)
+        # Kompaniyani tekshirish va telegram_id ni yangilash
+        company = await check_company(phone_number, message.from_user.id)
 
         if company:
-            # Telefon raqam topildi, login qilish
+            # Kompaniya topilsa, xabar yuborish
             await message.answer(
-                f"Телефон номер {phone_number} найден в базе данных. Добро пожаловать!",
+                f"Ваш номер {phone_number} успешно зарегистрирован. Добро пожаловать!",
                 reply_markup=keyboards["registration_complete"]
             )
         else:
-            # Telefon raqam topilmadi
+            # Telefon raqam bazada topilmasa, xabar yuborish
             await message.answer(
-                "Ваш номер телефона не найден в базе данных. Пожалуйста, проверьте и попробуйте снова."
+                "Ваш номер телефона не найден в базе данных. Пожалуйста, свяжитесь с администрацией."
             )
+
 
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
