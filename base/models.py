@@ -1,4 +1,13 @@
 from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+
+from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+from django.db import connection
+
 
 class Company(models.Model):
     name = models.CharField(max_length=255)
@@ -8,7 +17,7 @@ class Company(models.Model):
 
     def __str__(self):
         return self.name
-    
+
     def save(self, *args, **kwargs):
         # Telefon raqamni normalizatsiya qilish
         self.phone_number = self.normalize_phone_number(self.phone_number)
@@ -23,23 +32,24 @@ class Company(models.Model):
             phone_number = "+998" + phone_number
         return phone_number
 
-    @classmethod
-    def register_or_update(cls, phone_number, chat_id):
-        # Foydalanuvchi telefon raqami bilan ro'yxatdan o'tganmi yoki yo'qligini tekshiramiz
-        try:
-            company = cls.objects.get(phone_number=phone_number)
-            if company.chat_id is not None:
-                # Agar telefon raqami allaqachon ro'yxatdan o'tgan bo'lsa
-                raise ValueError(f"Bu telefon raqami {phone_number} bilan ro'yxatdan o'tgan.")
-            company.chat_id = chat_id
-            company.save()
-            return company
-        except cls.DoesNotExist:
-            # Telefon raqami bazada mavjud bo'lmasa, yangi yozuv yaratish
-            return cls.objects.create(phone_number=phone_number, chat_id=chat_id)
-        except ValueError as e:
-            # Agar ro'yxatdan o'tgan bo'lsa, xatolikni qaytarish
-            raise e
+
+# def reset_auto_increment(model):
+#     """
+#     ID qiymatlarini qayta tartiblash va 1 dan boshlash.
+#     """
+#     with connection.cursor() as cursor:
+#         table_name = model._meta.db_table  # Modelning jadval nomini olish
+#         cursor.execute(f"SET @count = 0;")
+#         cursor.execute(f"UPDATE {table_name} SET id = (@count := @count + 1);")
+#         cursor.execute(f"ALTER TABLE {table_name} AUTO_INCREMENT = 1;")
+
+
+# @receiver(post_delete, sender=Company)
+# def reorder_company_ids(sender, instance, **kwargs):
+#     """
+#     Ob'ekt o'chirilgandan so'ng `Company` jadvalidagi `id` ustunini qayta tartiblaydi.
+#     """
+#     reset_auto_increment(sender)
 
 
 
@@ -64,3 +74,5 @@ class CompanyList(models.Model):
 
     def __str__(self):
         return f"Список компаний для {self.company.name}"
+
+
