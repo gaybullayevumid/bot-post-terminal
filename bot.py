@@ -44,37 +44,23 @@ keyboards = {
     ),
 }
 
-async def export_to_excel(month_name, phone_number):
+@sync_to_async
+def export_to_excel(month_name, phone_number):
     try:
         logging.info(f"Exporting data for month: {month_name} and phone number: {phone_number}")
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
 
         month_index = months.index(month_name) + 1
-        
-        query = """
-            SELECT p.* FROM base_product p
-            INNER JOIN base_company c ON p.company_id = c.id
-            WHERE EXTRACT(MONTH FROM p.created_at) = %s AND c.phone_number = %s
-        """
-        
-        params = [month_index, phone_number]
-        logging.debug(f"Executing query: {query} with params: {params}")
 
-        cursor.execute(query, params)
-        data = cursor.fetchall()
-        cursor.close()
-        conn.close()
+        # Django ORM orqali so‘rov
+        products = Product.objects.filter(
+            created_at__month=month_index,
+            company__phone_number=phone_number
+        ).values("id", "title", "count", "price", "total_price", "created_at")
 
-        if data:
-            df = pd.DataFrame(data, columns=["ID", "Description", "Amount", "Price", "CreatedAt", "Month", "TotalAmount"])
-
-            if "CreatedAt" in df.columns:
-                df["CreatedAt"] = pd.to_datetime(df["CreatedAt"]).dt.tz_localize(None)
-
-            file_path = f"накладные_{month_name.lower()}.xlsx"
+        if products:
+            df = pd.DataFrame(list(products))
+            file_path = f"export_{phone_number}_{month_name}.xlsx"
             df.to_excel(file_path, index=False)
-            logging.info(f"Data exported successfully: {file_path}")
             return file_path
         else:
             logging.warning(f"No data found for month: {month_name} and phone number: {phone_number}")
@@ -82,6 +68,14 @@ async def export_to_excel(month_name, phone_number):
     except Exception as e:
         logging.error(f"Error exporting data: {e}")
         return None
+
+
+
+
+
+
+
+
 
 def phone_number_format(phone_number):
     """
@@ -100,92 +94,95 @@ def check_company(phone_number, chat_id):
     logging.info(f"Checking company for phone number: {phone_number}")
 
     try:
-        company = Company.objects.get(phone_number=phone_number)
-        if company.chat_id is None:
-            # Telegram ID yangilanadi
-            company.chat_id = chat_id
-            company.save()
-            logging.info(f"Chat ID updated for company: {company.name}")
-            return company
-        elif company.chat_id == chat_id:
-            # Foydalanuvchi ro‘yxatdan o‘tgan va o‘sha ID bilan kirgan
-            logging.info(f"Company with phone number {phone_number} is already registered with this chat_id.")
+        company = Company.objects.filter(phone_number=phone_number).first()
+        if company:
+            if company.chat_id is None:
+                company.chat_id = chat_id
+                company.save()
+                logging.info(f"Chat ID updated for company: {company.name}")
+            elif company.chat_id == chat_id:
+                logging.info(f"Company with phone number {phone_number} is already registered with this chat_id.")
             return company
         else:
-            # Foydalanuvchi boshqa Telegram akkaunt orqali kirishga harakat qilyapti
-            logging.warning(f"Company with phone number {phone_number} is already registered with another chat_id.")
+            logging.warning(f"Company with phone number {phone_number} not found.")
             return None
-    except Company.DoesNotExist:
-        logging.warning(f"Company with phone number {phone_number} not found.")
+    except Exception as e:
+        logging.error(f"Error checking company: {e}")
         return None
+
+
+
+
+# Ro'yxatga olish jarayonini kuzatish uchun lug'at
+user_registration_status = {}
 
 async def menu_handler(message: Message):
     logging.info(f"Menu handler triggered with text: {message.text}")
 
-    if message.contact:
-        phone_number = phone_number_format(message.contact.phone_number)
-        logging.info(f"Checking company for phone number: {phone_number}")
-
-        # Telefon raqamiga asoslangan kompaniya tekshiruvi
-        company = await check_company(phone_number, message.from_user.id)
-
-        if company:
-            # Kompaniyaga tegishli mahsulotlar eksport qilinadi
-            file_path = await export_to_excel(message.text, phone_number)
-            if file_path:
-                await message.answer_document(document=FSInputFile(file_path))
-                os.remove(file_path)
-            else:
-                await message.reply("Ma'lumotlar eksport qilinmadi.")
-        else:
-            await message.answer(
-                "Siz ro'yxatdan o'tmagan yoki kompaniya ma'lumotlari topilmadi."
-            )
-    else:
-        if message.text == "Регистрация":
-            await message.answer("Iltimos, telefon raqamingizni yuboring.", reply_markup=keyboards["request_contact"])
-        elif message.text == "Накладные":
-            await message.answer("Oylikni tanlang:", reply_markup=keyboards["months"])
-        elif message.text == "Главное меню":
-            await message.answer("Bosh menu:", reply_markup=keyboards["main"])
+    if message.text == "Регистрация":
+        # Foydalanuvchi ro'yxatdan o'tish jarayonida ekanligini belgilash
+        user_registration_status[message.from_user.id] = True
+        await message.answer("Iltimos, telefon raqamingizni yuboring.", reply_markup=keyboards["request_contact"])
+    elif message.text == "Накладные":
+        await message.answer("Oylikni tanlang:", reply_markup=keyboards["months"])
+    elif message.text == "Главное меню":
+        await message.answer("Bosh menu:", reply_markup=keyboards["main"])
 
 async def handle_contact(message: Message):
     if message.contact:
         phone_number = phone_number_format(message.contact.phone_number)
         logging.info(f"Received phone number: {phone_number}")
 
-        company = await check_company(phone_number, message.from_user.id)
+        # Foydalanuvchi ro'yxatdan o'tish jarayonida ekanligini tekshirish
+        if user_registration_status.get(message.from_user.id, False):
+            # Telefon raqamini faqat ro'yxatdan o'tish jarayonida yuborish mumkin
+            company = await check_company(phone_number, message.from_user.id)
 
-        if company:
-            await message.answer(f"Ваш номер {phone_number} успешно зарегистрирован. Добро пожаловать!", reply_markup=keyboards["main"])
+            if company:
+                # Kompaniya topilsa va telefon raqami to'g'ri bo'lsa, ro'yxatdan o'tishni davom ettirish
+                await message.answer(f"Sizning telefon raqamingiz {phone_number} muvaffaqiyatli ro‘yxatdan o‘tdi. Xush kelibsiz!", reply_markup=keyboards["main"])
+            else:
+                await message.answer("Sizning telefon raqamingiz bazada topilmadi yoki boshqa kompaniya bilan ro‘yxatdan o‘tgansiz. Iltimos, adminstratsiya bilan bog‘laning.")
+            
+            # Ro'yxatdan o'tishdan keyin, foydalanuvchi statusini yangilash
+            user_registration_status[message.from_user.id] = False
         else:
-            await message.answer("Ваш номер телефона уже зарегистрирован или не найден в базе данных. Пожалуйста, свяжитесь с администрацией.")
+            # Agar foydalanuvchi ro'yxatdan o'tish jarayonida bo'lmasa, telefon raqamini rad etish
+            await message.answer("Telefon raqamingizni faqat ro‘yxatdan o‘tishda yuborishingiz mumkin. Iltimos, 'Регистрация' tugmasini bosing.")
     else:
-        await message.answer("Пожалуйста, отправьте свой номер телефона с помощью кнопки.")
+        # Telefon raqami yuborilmasa, so'rash
+        await message.answer("Iltimos, telefon raqamingizni yuboring.")
+
 
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
-    
-    # Foydalanuvchi Telegram ID va telefon raqami orqali tekshiriladi
+
     phone_number = message.contact.phone_number if message.contact else None
     if phone_number:
         phone_number = phone_number_format(phone_number)
-        
-        # Ro'yxatdan o'tganligini tekshiramiz
+
         company = await check_company(phone_number, message.from_user.id)
-        
+
         if not company:
-            # Agar foydalanuvchi boshqa chat ID dan kirsa yoki ro'yxatdan o'tmagan bo'lsa
-            await message.reply("Siz ro'yxatdan o'tmagan foydalanuvchisiz yoki boshqa аккаунт orqali попытка. Iltimos, avval ro'yxatdan o'ting.")
-            return  # davom etmaydi
-    
-    # Faqat ro‘yxatdan o‘tgan foydalanuvchilar uchun faylni eksport qilish
-    file_path = await export_to_excel(message.text, phone_number)
+            await message.reply("Siz ro'yxatdan o'tmagan foydalanuvchisiz yoki boshqa akkaunt orqali kirgansiz. Iltimos, avval ro'yxatdan o'ting.")
+            return
+
+    month_name = message.text
+    file_path = await export_to_excel(month_name, phone_number)
+
     if file_path:
-        await message.answer_document(document=FSInputFile(file_path))
-        os.remove(file_path)
+        # Foydalanuvchiga faylni jo'natish
+        excel_file = FSInputFile(file_path)
+        await message.answer_document(excel_file, caption=f"{month_name} oyi uchun ma'lumotlar.")
     else:
-        await message.reply("Произошла ошибка при экспорте данных или данные отсутствуют.")
+        await message.reply("Bu oy uchun ma'lumotlar topilmadi.")
+
+
+
+
+
+
+
 
 async def help_handler(message: Message):
     logging.info("Help command triggered.")

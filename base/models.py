@@ -1,11 +1,11 @@
 from django.db import models
 
-
 class Company(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     phone_number = models.CharField(max_length=20, unique=True)
-    chat_id = models.CharField(max_length=20, blank=True, null=True)  # Telegram chat_id uchun
+    tg_id = models.CharField(max_length=20, blank=True, null=True)  # Telegram foydalanuvchi ID-si uchun
+    chat_id = models.CharField(max_length=20, blank=True, null=True)  # Telegram chat ID-si uchun
 
     def __str__(self):
         return self.name
@@ -23,7 +23,6 @@ class Company(models.Model):
             phone_number = "+998" + phone_number
         return phone_number
 
-
 class Product(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='products')
     title = models.CharField(max_length=255)
@@ -38,10 +37,3 @@ class Product(models.Model):
 
     def __str__(self):
         return self.title
-
-
-class CompanyList(models.Model):
-    company = models.OneToOneField(Company, on_delete=models.CASCADE, related_name='company_list')
-
-    def __str__(self):
-        return f"Список компаний для {self.company.name}"
