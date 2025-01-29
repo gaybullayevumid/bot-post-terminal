@@ -12,7 +12,7 @@ from asgiref.sync import sync_to_async
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
-from base.models import Company
+from base.models import Company, Product
 
 BOT_TOKEN = "7769778979:AAFNG8nuj0m2rbWbJFHz8Jb2-FHS_Bv5qIc"
 DB_CONFIG = {"dbname": "avtolider", "user": "postgres", "password": "8505", "host": "localhost", "port": "5432"}
@@ -23,23 +23,23 @@ dp = Dispatcher()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 months = [
-    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
 ]
 
 keyboards = {
     "main": ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Регистрация"), KeyboardButton(text="Накладные")],
-                  [KeyboardButton(text="📊Акт Сверка (СУМ)"), KeyboardButton(text="📊Акт Сверка (USD)"), KeyboardButton(text="☎️Контакты")],
-                  [KeyboardButton(text="📜О компании")]],
+        keyboard=[[KeyboardButton(text="Registration"), KeyboardButton(text="Invoices")],
+                  [KeyboardButton(text="📊Balance Act (SUM)"), KeyboardButton(text="📊Balance Act (USD)"), KeyboardButton(text="☎️Contacts")],
+                  [KeyboardButton(text="📜About the Company")]],
         resize_keyboard=True
     ),
     "months": ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=m) for m in months[i:i + 3]] for i in range(0, 12, 3)] + [[KeyboardButton(text="Главное меню")]],
+        keyboard=[[KeyboardButton(text=m) for m in months[i:i + 3]] for i in range(0, 12, 3)] + [[KeyboardButton(text="Main Menu")]],
         resize_keyboard=True
     ),
     "request_contact": ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Отправить номер телефона", request_contact=True)]],
+        keyboard=[[KeyboardButton(text="Send phone number", request_contact=True)]],
         resize_keyboard=True
     ),
 }
@@ -47,35 +47,50 @@ keyboards = {
 @sync_to_async
 def export_to_excel(month_name, phone_number):
     try:
-        logging.info(f"Exporting data for month: {month_name} and phone number: {phone_number}")
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
 
+        # Convert the month to a number (1-12)
         month_index = months.index(month_name) + 1
+        
+        # Update the query to fetch data for the selected month and phone number
+        cursor.execute(
+            """
+            SELECT p.id, p.title, p.count, p.price, p.created_at, p.total_price
+            FROM base_product p
+            JOIN base_company c ON p.company_id = c.id
+            WHERE EXTRACT(MONTH FROM p.created_at) = %s AND c.phone_number = %s
+            """, 
+            [month_index, phone_number]
+        )
+        data = cursor.fetchall()
+        cursor.close()
+        conn.close()
 
-        # Django ORM orqali so‘rov
-        products = Product.objects.filter(
-            created_at__month=month_index,
-            company__phone_number=phone_number
-        ).values("id", "title", "count", "price", "total_price", "created_at")
+        if data:
+            df = pd.DataFrame(data, columns=["ID", "Title", "Count", "Price", "CreatedAt", "TotalPrice"])
 
-        if products:
-            df = pd.DataFrame(list(products))
-            file_path = f"export_{phone_number}_{month_name}.xlsx"
+            # Format the date field
+            if "CreatedAt" in df.columns:
+                df["CreatedAt"] = pd.to_datetime(df["CreatedAt"]).dt.tz_localize(None)
+
+            # Save to Excel file
+            file_path = f"invoice_{month_name.lower()}.xlsx"
             df.to_excel(file_path, index=False)
-            return file_path
+
+            # Check if the file was created successfully
+            if os.path.exists(file_path):
+                logging.info(f"File created: {file_path}")
+                return file_path
+            else:
+                logging.error("File creation failed!")
+                return None
         else:
-            logging.warning(f"No data found for month: {month_name} and phone number: {phone_number}")
+            logging.warning(f"No data found for {month_name} with phone number {phone_number}")
             return None
     except Exception as e:
-        logging.error(f"Error exporting data: {e}")
+        logging.error(f"Error: {e}")
         return None
-
-
-
-
-
-
-
-
 
 def phone_number_format(phone_number):
     """
@@ -110,100 +125,84 @@ def check_company(phone_number, chat_id):
         logging.error(f"Error checking company: {e}")
         return None
 
-
-
-
-# Ro'yxatga olish jarayonini kuzatish uchun lug'at
+# Registration process tracker
 user_registration_status = {}
 
 async def menu_handler(message: Message):
     logging.info(f"Menu handler triggered with text: {message.text}")
 
-    if message.text == "Регистрация":
-        # Foydalanuvchi ro'yxatdan o'tish jarayonida ekanligini belgilash
+    if message.text == "Registration":
         user_registration_status[message.from_user.id] = True
-        await message.answer("Iltimos, telefon raqamingizni yuboring.", reply_markup=keyboards["request_contact"])
-    elif message.text == "Накладные":
-        await message.answer("Oylikni tanlang:", reply_markup=keyboards["months"])
-    elif message.text == "Главное меню":
-        await message.answer("Bosh menu:", reply_markup=keyboards["main"])
+        await message.answer("Please send your phone number.", reply_markup=keyboards["request_contact"])
+    elif message.text == "Invoices":
+        await message.answer("Select the month:", reply_markup=keyboards["months"])
+    elif message.text == "Main Menu":
+        await message.answer("Main menu:", reply_markup=keyboards["main"])
 
 async def handle_contact(message: Message):
     if message.contact:
         phone_number = phone_number_format(message.contact.phone_number)
         logging.info(f"Received phone number: {phone_number}")
 
-        # Foydalanuvchi ro'yxatdan o'tish jarayonida ekanligini tekshirish
         if user_registration_status.get(message.from_user.id, False):
-            # Telefon raqamini faqat ro'yxatdan o'tish jarayonida yuborish mumkin
             company = await check_company(phone_number, message.from_user.id)
 
             if company:
-                # Kompaniya topilsa va telefon raqami to'g'ri bo'lsa, ro'yxatdan o'tishni davom ettirish
-                await message.answer(f"Sizning telefon raqamingiz {phone_number} muvaffaqiyatli ro‘yxatdan o‘tdi. Xush kelibsiz!", reply_markup=keyboards["main"])
+                await message.answer(f"Your phone number {phone_number} has been successfully registered. Welcome!", reply_markup=keyboards["main"])
             else:
-                await message.answer("Sizning telefon raqamingiz bazada topilmadi yoki boshqa kompaniya bilan ro‘yxatdan o‘tgansiz. Iltimos, adminstratsiya bilan bog‘laning.")
+                await message.answer("Your phone number was not found in the database or is registered with another company. Please contact the administration.")
             
-            # Ro'yxatdan o'tishdan keyin, foydalanuvchi statusini yangilash
             user_registration_status[message.from_user.id] = False
         else:
-            # Agar foydalanuvchi ro'yxatdan o'tish jarayonida bo'lmasa, telefon raqamini rad etish
-            await message.answer("Telefon raqamingizni faqat ro‘yxatdan o‘tishda yuborishingiz mumkin. Iltimos, 'Регистрация' tugmasini bosing.")
+            await message.answer("You can only send your phone number during registration. Please press the 'Registration' button.")
     else:
-        # Telefon raqami yuborilmasa, so'rash
-        await message.answer("Iltimos, telefon raqamingizni yuboring.")
-
+        await message.answer("Please send your phone number.")
 
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
 
+    # Get the phone number from the user
     phone_number = message.contact.phone_number if message.contact else None
     if phone_number:
         phone_number = phone_number_format(phone_number)
 
+        # Check if the company exists
         company = await check_company(phone_number, message.from_user.id)
 
         if not company:
-            await message.reply("Siz ro'yxatdan o'tmagan foydalanuvchisiz yoki boshqa akkaunt orqali kirgansiz. Iltimos, avval ro'yxatdan o'ting.")
+            await message.reply("You are not a registered user or logged in with another account. Please register first.")
             return
 
+    # Get the month
     month_name = message.text
     file_path = await export_to_excel(month_name, phone_number)
 
     if file_path:
-        # Foydalanuvchiga faylni jo'natish
         excel_file = FSInputFile(file_path)
-        await message.answer_document(excel_file, caption=f"{month_name} oyi uchun ma'lumotlar.")
+        await message.answer_document(excel_file, caption=f"Data for the month of {month_name}.")
     else:
-        await message.reply("Bu oy uchun ma'lumotlar topilmadi.")
-
-
-
-
-
-
-
+        await message.reply("No data found for this month. Please make sure there is data for the selected month or check your database.")
 
 async def help_handler(message: Message):
     logging.info("Help command triggered.")
     await message.answer(
-        "Это бот для регистрации и экспорта данных.\n"
-        "Доступные команды:\n"
-        "/start - Запустить бота\n"
-        "/help - Получить помощь\n"
-        "Вы также можете использовать кнопки для взаимодействия."
+        "This is a bot for registration and data export.\n"
+        "Available commands:\n"
+        "/start - Start the bot\n"
+        "/help - Get help\n"
+        "You can also use the buttons for interaction."
     )
 
 async def start():
     logging.info("Starting bot...")
     await bot.set_my_commands([ 
-        BotCommand(command="/start", description="Запустить бота"), 
-        BotCommand(command="/help", description="Помощь!"), 
+        BotCommand(command="/start", description="Start the bot"), 
+        BotCommand(command="/help", description="Help!"), 
     ])
 
-    dp.message.register(lambda msg: msg.answer("Добро пожаловать!", reply_markup=keyboards["main"]), Command("start"))
+    dp.message.register(lambda msg: msg.answer("Welcome!", reply_markup=keyboards["main"]), Command("start"))
     dp.message.register(help_handler, Command("help"))
-    dp.message.register(menu_handler, F.text.in_(["Накладные", "Главное меню", "Регистрация"]))
+    dp.message.register(menu_handler, F.text.in_(["Invoices", "Main Menu", "Registration"]))
     dp.message.register(handle_contact, F.contact)
     dp.message.register(month_handler, F.text.in_(months))
 
