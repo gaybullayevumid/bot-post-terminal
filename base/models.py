@@ -1,12 +1,4 @@
 from django.db import models
-from django.db.models.signals import post_delete
-from django.dispatch import receiver
-
-
-from django.db import models
-from django.db.models.signals import post_delete
-from django.dispatch import receiver
-from django.db import connection
 
 
 class Company(models.Model):
@@ -19,38 +11,17 @@ class Company(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
-        # Telefon raqamni normalizatsiya qilish
         self.phone_number = self.normalize_phone_number(self.phone_number)
         super().save(*args, **kwargs)
 
     @staticmethod
     def normalize_phone_number(phone_number):
         phone_number = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-        if phone_number.startswith("998"):  # Agar xalqaro kodsiz kelgan bo'lsa
+        if phone_number.startswith("998"):
             phone_number = "+" + phone_number
-        elif not phone_number.startswith("+998"):  # Agar boshqa formatda kelsa
+        elif not phone_number.startswith("+998"):
             phone_number = "+998" + phone_number
         return phone_number
-
-
-# def reset_auto_increment(model):
-#     """
-#     ID qiymatlarini qayta tartiblash va 1 dan boshlash.
-#     """
-#     with connection.cursor() as cursor:
-#         table_name = model._meta.db_table  # Modelning jadval nomini olish
-#         cursor.execute(f"SET @count = 0;")
-#         cursor.execute(f"UPDATE {table_name} SET id = (@count := @count + 1);")
-#         cursor.execute(f"ALTER TABLE {table_name} AUTO_INCREMENT = 1;")
-
-
-# @receiver(post_delete, sender=Company)
-# def reorder_company_ids(sender, instance, **kwargs):
-#     """
-#     Ob'ekt o'chirilgandan so'ng `Company` jadvalidagi `id` ustunini qayta tartiblaydi.
-#     """
-#     reset_auto_increment(sender)
-
 
 
 class Product(models.Model):
@@ -63,7 +34,7 @@ class Product(models.Model):
 
     def save(self, *args, **kwargs):
         self.total_price = self.price * self.count
-        super(Product, self).save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.title
@@ -74,5 +45,3 @@ class CompanyList(models.Model):
 
     def __str__(self):
         return f"Список компаний для {self.company.name}"
-
-
