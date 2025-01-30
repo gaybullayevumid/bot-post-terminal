@@ -4,7 +4,6 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import BotCommand, Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.filters import Command
 from asyncio import run
-import psycopg2
 import pandas as pd
 import django
 from asgiref.sync import sync_to_async
@@ -15,7 +14,6 @@ django.setup()
 from base.models import Company, Product
 
 BOT_TOKEN = "7769778979:AAFNG8nuj0m2rbWbJFHz8Jb2-FHS_Bv5qIc"
-DB_CONFIG = {"dbname": "avtolider", "user": "postgres", "password": "8505", "host": "localhost", "port": "5432"}
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
@@ -29,7 +27,7 @@ months = [
 
 keyboards = {
     "main": ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Registration"), KeyboardButton(text="Invoices")],
+        keyboard=[[KeyboardButton(text="Invoices")],
                   [KeyboardButton(text="📊Balance Act (SUM)"), KeyboardButton(text="📊Balance Act (USD)"), KeyboardButton(text="☎️Contacts")],
                   [KeyboardButton(text="📜About the Company")]],
         resize_keyboard=True
@@ -42,15 +40,17 @@ keyboards = {
         keyboard=[[KeyboardButton(text="Send phone number", request_contact=True)]],
         resize_keyboard=True
     ),
+    "registration_only": ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Registration")]],
+        resize_keyboard=True
+    ),
 }
 
 @sync_to_async
 def export_to_excel(month_name, phone_number):
     try:
-        # Convert the month to a number (1-12)
         month_index = months.index(month_name) + 1
         
-        # Fetch data using Django ORM
         products = Product.objects.filter(
             created_at__month=month_index,
             company__phone_number=phone_number
@@ -121,13 +121,22 @@ user_phone_numbers = {}
 async def menu_handler(message: Message):
     logging.info(f"Menu handler triggered with text: {message.text}")
 
-    if message.text == "Registration":
-        user_registration_status[message.from_user.id] = True
-        await message.answer("Please send your phone number.", reply_markup=keyboards["request_contact"])
-    elif message.text == "Invoices":
+    # Ro‘yxatdan o‘tmagan foydalanuvchilarni tekshirish
+    if message.from_user.id not in user_phone_numbers:
+        if message.text == "Registration":
+            user_registration_status[message.from_user.id] = True
+            await message.answer("Iltimos, telefon raqamingizni yuboring.", reply_markup=keyboards["request_contact"])
+        else:
+            await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
+        return
+
+    # Foydalanuvchi allaqachon ro‘yxatdan o‘tgan bo‘lsa:
+    if message.text == "Invoices":
         await message.answer("Select the month:", reply_markup=keyboards["months"])
     elif message.text == "Main Menu":
         await message.answer("Main menu:", reply_markup=keyboards["main"])
+
+
 
 async def handle_contact(message: Message):
     if message.contact:
@@ -152,6 +161,11 @@ async def handle_contact(message: Message):
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
 
+    # Check if the user is registered
+    if message.from_user.id not in user_phone_numbers:
+        await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
+        return
+
     # Get the phone number from the user
     phone_number = user_phone_numbers.get(message.from_user.id)
     if not phone_number:
@@ -168,6 +182,8 @@ async def month_handler(message: Message):
     else:
         await message.reply("No data found for this month. Please make sure there is data for the selected month or check your database.")
 
+
+
 async def help_handler(message: Message):
     logging.info("Help command triggered.")
     await message.answer(
@@ -178,6 +194,10 @@ async def help_handler(message: Message):
         "You can also use the buttons for interaction."
     )
 
+async def start_handler(message: Message):
+    logging.info("Start command triggered.")
+    await message.answer("Welcome! Please register to continue.", reply_markup=keyboards["registration_only"])
+
 async def start():
     logging.info("Starting bot...")
     await bot.set_my_commands([ 
@@ -185,7 +205,7 @@ async def start():
         BotCommand(command="/help", description="Help!")
     ])
 
-    dp.message.register(lambda msg: msg.answer("Welcome!", reply_markup=keyboards["main"]), Command("start"))
+    dp.message.register(start_handler, Command("start"))
     dp.message.register(help_handler, Command("help"))
     dp.message.register(menu_handler, F.text.in_(["Invoices", "Main Menu", "Registration"]))
     dp.message.register(handle_contact, F.contact)
