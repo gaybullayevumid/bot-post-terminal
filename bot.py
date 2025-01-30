@@ -47,32 +47,21 @@ keyboards = {
 @sync_to_async
 def export_to_excel(month_name, phone_number):
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-
         # Convert the month to a number (1-12)
         month_index = months.index(month_name) + 1
         
-        # Update the query to fetch data for the selected month and phone number
-        cursor.execute(
-            """
-            SELECT p.id, p.title, p.count, p.price, p.created_at, p.total_price
-            FROM base_product p
-            JOIN base_company c ON p.company_id = c.id
-            WHERE EXTRACT(MONTH FROM p.created_at) = %s AND c.phone_number = %s
-            """, 
-            [month_index, phone_number]
-        )
-        data = cursor.fetchall()
-        cursor.close()
-        conn.close()
+        # Fetch data using Django ORM
+        products = Product.objects.filter(
+            created_at__month=month_index,
+            company__phone_number=phone_number
+        ).values('id', 'title', 'count', 'price', 'created_at', 'total_price')
 
-        if data:
-            df = pd.DataFrame(data, columns=["ID", "Title", "Count", "Price", "CreatedAt", "TotalPrice"])
+        if products:
+            df = pd.DataFrame(list(products))
 
             # Format the date field
-            if "CreatedAt" in df.columns:
-                df["CreatedAt"] = pd.to_datetime(df["CreatedAt"]).dt.tz_localize(None)
+            if "created_at" in df.columns:
+                df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
 
             # Save to Excel file
             file_path = f"invoice_{month_name.lower()}.xlsx"
@@ -127,6 +116,7 @@ def check_company(phone_number, chat_id):
 
 # Registration process tracker
 user_registration_status = {}
+user_phone_numbers = {}
 
 async def menu_handler(message: Message):
     logging.info(f"Menu handler triggered with text: {message.text}")
@@ -149,6 +139,7 @@ async def handle_contact(message: Message):
 
             if company:
                 await message.answer(f"Your phone number {phone_number} has been successfully registered. Welcome!", reply_markup=keyboards["main"])
+                user_phone_numbers[message.from_user.id] = phone_number
             else:
                 await message.answer("Your phone number was not found in the database or is registered with another company. Please contact the administration.")
             
@@ -162,16 +153,10 @@ async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
 
     # Get the phone number from the user
-    phone_number = message.contact.phone_number if message.contact else None
-    if phone_number:
-        phone_number = phone_number_format(phone_number)
-
-        # Check if the company exists
-        company = await check_company(phone_number, message.from_user.id)
-
-        if not company:
-            await message.reply("You are not a registered user or logged in with another account. Please register first.")
-            return
+    phone_number = user_phone_numbers.get(message.from_user.id)
+    if not phone_number:
+        await message.reply("You are not a registered user or logged in with another account. Please register first.")
+        return
 
     # Get the month
     month_name = message.text
@@ -197,7 +182,7 @@ async def start():
     logging.info("Starting bot...")
     await bot.set_my_commands([ 
         BotCommand(command="/start", description="Start the bot"), 
-        BotCommand(command="/help", description="Help!"), 
+        BotCommand(command="/help", description="Help!")
     ])
 
     dp.message.register(lambda msg: msg.answer("Welcome!", reply_markup=keyboards["main"]), Command("start"))
