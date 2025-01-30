@@ -136,10 +136,12 @@ async def menu_handler(message: Message):
     elif message.text == "Main Menu":
         await message.answer("Main menu:", reply_markup=keyboards["main"])
 
-
-
 async def handle_contact(message: Message):
     if message.contact:
+        if message.contact.user_id != message.from_user.id:
+            await message.answer("Iltimos, faqat o'z telefon raqamingizni jo'nating!")
+            return
+        
         phone_number = phone_number_format(message.contact.phone_number)
         logging.info(f"Received phone number: {phone_number}")
 
@@ -157,6 +159,10 @@ async def handle_contact(message: Message):
             await message.answer("You can only send your phone number during registration. Please press the 'Registration' button.")
     else:
         await message.answer("Please send your phone number.")
+
+
+
+
 
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")

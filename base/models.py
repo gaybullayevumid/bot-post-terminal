@@ -26,10 +26,10 @@ class Company(models.Model):
 class Product(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='products')
     title = models.CharField(max_length=255)
-    count = models.IntegerField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)
+    count = models.IntegerField(null=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     total_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     def save(self, *args, **kwargs):
         self.total_price = self.price * self.count
