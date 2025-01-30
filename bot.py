@@ -8,28 +8,36 @@ import pandas as pd
 import django
 from asgiref.sync import sync_to_async
 
+# Django setup
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from base.models import Company, Product
 
+# Bot token
 BOT_TOKEN = "7769778979:AAFNG8nuj0m2rbWbJFHz8Jb2-FHS_Bv5qIc"
 
+# Initialize bot and dispatcher
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
+# Logging configuration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Months list
 months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
 ]
 
+# Keyboards
 keyboards = {
     "main": ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Invoices")],
-                  [KeyboardButton(text="📊Balance Act (SUM)"), KeyboardButton(text="📊Balance Act (USD)"), KeyboardButton(text="☎️Contacts")],
-                  [KeyboardButton(text="📜About the Company")]],
+        keyboard=[
+            [KeyboardButton(text="Invoices")],
+            [KeyboardButton(text="📊Balance Act (SUM)"), KeyboardButton(text="📊Balance Act (USD)"), KeyboardButton(text="☎️Contacts")],
+            [KeyboardButton(text="📜About the Company")]
+        ],
         resize_keyboard=True
     ),
     "months": ReplyKeyboardMarkup(
@@ -46,101 +54,8 @@ keyboards = {
     ),
 }
 
-@sync_to_async
-def export_to_excel(month_name, phone_number):
-    try:
-        month_index = months.index(month_name) + 1
-        
-        products = Product.objects.filter(
-            created_at__month=month_index,
-            company__phone_number=phone_number
-        ).values('id', 'title', 'count', 'price', 'created_at', 'total_price')
-
-        if products:
-            df = pd.DataFrame(list(products))
-
-            # Format the date field
-            if "created_at" in df.columns:
-                df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
-
-            # Save to Excel file
-            file_path = f"invoice_{month_name.lower()}.xlsx"
-            df.to_excel(file_path, index=False)
-
-            # Check if the file was created successfully
-            if os.path.exists(file_path):
-                logging.info(f"File created: {file_path}")
-                return file_path
-            else:
-                logging.error("File creation failed!")
-                return None
-        else:
-            logging.warning(f"No data found for {month_name} with phone number {phone_number}")
-            return None
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        return None
-
-@sync_to_async
-def export_total_sum_to_excel(phone_number):
-    try:
-        # Berilgan telefon raqami uchun barcha mahsulotlarni olish
-        products = Product.objects.filter(
-            company__phone_number=phone_number
-        ).values('id', 'title', 'count', 'price', 'created_at', 'total_price')
-
-        if products:
-            df = pd.DataFrame(list(products))
-
-            # 'created_at' ustunini timezone-naive (vaqt zonasiz) qilish
-            if "created_at" in df.columns:
-                df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
-
-            # 'total_price' ustunining jami summasini hisoblash
-            total_sum = df['total_price'].sum()
-
-            # Jami summa bilan yangi qatorni qo'shish
-            total_sum_row = pd.DataFrame({
-                'id': ['Total'],
-                'title': [''],
-                'count': [''],
-                'price': [''],
-                'created_at': [''],
-                'total_price': [total_sum]
-            })
-
-            # Asl DataFrame-ga jami summa qatorini qo'shish
-            df = pd.concat([df, total_sum_row], ignore_index=True)
-
-            # Excel faylini saqlash
-            file_path = "total_sum.xlsx"
-            df.to_excel(file_path, index=False)
-
-            # Fayl muvaffaqiyatli yaratildimi tekshirish
-            if os.path.exists(file_path):
-                logging.info(f"Fayl yaratildi: {file_path}")
-                return file_path  # Fayl manzilini qaytarish
-            else:
-                logging.error("Fayl yaratishda xatolik yuz berdi!")
-                return None
-        else:
-            logging.warning(f"{phone_number} telefon raqami uchun ma'lumot topilmadi")
-            return None
-    except Exception as e:
-        logging.error(f"Xato: {e}")
-        return None
-
-
-
-
-
-
-
+# Helper function to format phone number
 def phone_number_format(phone_number):
-    """
-    This function formats a phone number to the international format.
-    It removes unnecessary characters and ensures the number starts with +998.
-    """
     phone_number = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
     if phone_number.startswith("998"):
         phone_number = "+" + phone_number
@@ -148,10 +63,10 @@ def phone_number_format(phone_number):
         phone_number = "+998" + phone_number
     return phone_number
 
+# Async function to check company
 @sync_to_async
 def check_company(phone_number, chat_id):
     logging.info(f"Checking company for phone number: {phone_number}")
-
     try:
         company = Company.objects.filter(phone_number=phone_number).first()
         if company:
@@ -169,14 +84,144 @@ def check_company(phone_number, chat_id):
         logging.error(f"Error checking company: {e}")
         return None
 
+# Async function to export data to Excel for a specific month
+@sync_to_async
+def export_to_excel(month_name, phone_number):
+    try:
+        month_index = months.index(month_name) + 1
+        products = Product.objects.filter(
+            created_at__month=month_index,
+            company__phone_number=phone_number
+        ).values('id', 'title', 'count', 'price', 'created_at', 'total_price')
+
+        if products:
+            df = pd.DataFrame(list(products))
+            if "created_at" in df.columns:
+                df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
+
+            file_path = f"invoice_{month_name.lower()}.xlsx"
+            df.to_excel(file_path, index=False)
+
+            if os.path.exists(file_path):
+                logging.info(f"File created: {file_path}")
+                return file_path
+            else:
+                logging.error("File creation failed!")
+                return None
+        else:
+            logging.warning(f"No data found for {month_name} with phone number {phone_number}")
+            return None
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        return None
+
+# Async function to export total sum to Excel with USD
+@sync_to_async
+def export_total_sum_to_excel_sum(phone_number):
+    try:
+        products = Product.objects.filter(
+            company__phone_number=phone_number
+        ).values('id', 'title', 'count', 'price', 'created_at', 'total_price')
+
+        if products:
+            df = pd.DataFrame(list(products))
+            if "created_at" in df.columns:
+                df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
+
+            # Jami summani hisoblash
+            total_sum = df['total_price'].sum()
+
+            # Jami summa bilan yangi qatorni qo'shish (SUM)
+            total_sum_row = pd.DataFrame({
+                'id': ['Total (SUM)'],
+                'title': [''],
+                'count': [''],
+                'price': [''],
+                'created_at': [''],
+                'total_price': [total_sum]
+            })
+
+            # Asl DataFrame-ga jami summa qatorini qo'shish
+            df = pd.concat([df, total_sum_row], ignore_index=True)
+
+            # Excel faylini saqlash
+            file_path = "total_sum_sum.xlsx"
+            df.to_excel(file_path, index=False)
+
+            if os.path.exists(file_path):
+                logging.info(f"File created: {file_path}")
+                return file_path
+            else:
+                logging.error("File creation failed!")
+                return None
+        else:
+            logging.warning(f"No data found for phone number {phone_number}")
+            return None
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        return None
+
+
+
+
+
 # Registration process tracker
 user_registration_status = {}
 user_phone_numbers = {}
 
+
+@sync_to_async
+def export_total_sum_to_excel_usd(phone_number):
+    try:
+        products = Product.objects.filter(
+            company__phone_number=phone_number
+        ).values('id', 'title', 'count', 'price', 'created_at', 'total_price')
+
+        if products:
+            df = pd.DataFrame(list(products))
+            if "created_at" in df.columns:
+                df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
+
+            # Jami summani hisoblash
+            total_sum = df['total_price'].sum()
+
+            # Jami summani USD ga aylantirish
+            exchange_rate = 11000  # 1 USD = 11000 SUM
+            total_usd = total_sum / exchange_rate
+
+            # Jami summa bilan yangi qatorni qo'shish (USD)
+            total_usd_row = pd.DataFrame({
+                'id': ['Total (USD)'],
+                'title': [''],
+                'count': [''],
+                'price': [''],
+                'created_at': [''],
+                'total_price': [total_usd]
+            })
+
+            # Asl DataFrame-ga jami summa qatorini qo'shish
+            df = pd.concat([df, total_usd_row], ignore_index=True)
+
+            # Excel faylini saqlash
+            file_path = "total_sum_usd.xlsx"
+            df.to_excel(file_path, index=False)
+
+            if os.path.exists(file_path):
+                logging.info(f"File created: {file_path}")
+                return file_path
+            else:
+                logging.error("File creation failed!")
+                return None
+        else:
+            logging.warning(f"No data found for phone number {phone_number}")
+            return None
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        return None
+
+# Menu handler
 async def menu_handler(message: Message):
     logging.info(f"Menu handler triggered with text: {message.text}")
-
-    # Ro‘yxatdan o‘tmagan foydalanuvchilarni tekshirish
     if message.from_user.id not in user_phone_numbers:
         if message.text == "Registration":
             user_registration_status[message.from_user.id] = True
@@ -185,18 +230,18 @@ async def menu_handler(message: Message):
             await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
         return
 
-    # Foydalanuvchi allaqachon ro‘yxatdan o‘tgan bo‘lsa:
     if message.text == "Invoices":
         await message.answer("Select the month:", reply_markup=keyboards["months"])
     elif message.text == "Main Menu":
         await message.answer("Main menu:", reply_markup=keyboards["main"])
 
+# Contact handler
 async def handle_contact(message: Message):
     if message.contact:
         if message.contact.user_id != message.from_user.id:
             await message.answer("Iltimos, faqat o'z telefon raqamingizni jo'nating!")
             return
-        
+
         phone_number = phone_number_format(message.contact.phone_number)
         logging.info(f"Received phone number: {phone_number}")
 
@@ -208,28 +253,25 @@ async def handle_contact(message: Message):
                 user_phone_numbers[message.from_user.id] = phone_number
             else:
                 await message.answer("Your phone number was not found in the database or is registered with another company. Please contact the administration.")
-            
+
             user_registration_status[message.from_user.id] = False
         else:
             await message.answer("You can only send your phone number during registration. Please press the 'Registration' button.")
     else:
         await message.answer("Please send your phone number.")
 
+# Month handler
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
-
-    # Check if the user is registered
     if message.from_user.id not in user_phone_numbers:
         await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
         return
 
-    # Get the phone number from the user
     phone_number = user_phone_numbers.get(message.from_user.id)
     if not phone_number:
         await message.reply("You are not a registered user or logged in with another account. Please register first.")
         return
 
-    # Get the month
     month_name = message.text
     file_path = await export_to_excel(month_name, phone_number)
 
@@ -239,26 +281,45 @@ async def month_handler(message: Message):
     else:
         await message.reply("No data found for this month. Please make sure there is data for the selected month or check your database.")
 
+# Balance Act (SUM) handler
 async def balance_act_sum_handler(message: Message):
     logging.info(f"Balance Act (SUM) handler triggered with text: {message.text}")
-
-    # Check if the user is registered
     if message.from_user.id not in user_phone_numbers:
         await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
         return
 
-    # Get the phone number from the user
     phone_number = user_phone_numbers.get(message.from_user.id)
     if not phone_number:
         await message.reply("You are not a registered user or logged in with another account. Please register first.")
         return
 
-    # Generate the Excel file with all data and total sum
-    file_path = await export_total_sum_to_excel(phone_number)
+    # SUM uchun Excel faylini yaratish
+    file_path = await export_total_sum_to_excel_sum(phone_number)
 
     if file_path:
         excel_file = FSInputFile(file_path)
-        await message.answer_document(excel_file, caption="All products with total sum.")
+        await message.answer_document(excel_file, caption="All products with total sum in SUM.")
+    else:
+        await message.reply("No data found. Please make sure there is data in the database.")
+
+# Balance Act (USD) handler
+async def balance_act_usd_handler(message: Message):
+    logging.info(f"Balance Act (USD) handler triggered with text: {message.text}")
+    if message.from_user.id not in user_phone_numbers:
+        await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
+        return
+
+    phone_number = user_phone_numbers.get(message.from_user.id)
+    if not phone_number:
+        await message.reply("You are not a registered user or logged in with another account. Please register first.")
+        return
+
+    # USD uchun Excel faylini yaratish
+    file_path = await export_total_sum_to_excel_usd(phone_number)
+
+    if file_path:
+        excel_file = FSInputFile(file_path)
+        await message.answer_document(excel_file, caption="All products with total sum in USD.")
     else:
         await message.reply("No data found. Please make sure there is data in the database.")
 
@@ -266,6 +327,7 @@ async def balance_act_sum_handler(message: Message):
 
 
 
+# Help handler
 async def help_handler(message: Message):
     logging.info("Help command triggered.")
     await message.answer(
@@ -276,14 +338,15 @@ async def help_handler(message: Message):
         "You can also use the buttons for interaction."
     )
 
+# Start handler
 async def start_handler(message: Message):
     logging.info("Start command triggered.")
     await message.answer("Welcome! Please register to continue.", reply_markup=keyboards["registration_only"])
-
+# Main start function
 async def start():
     logging.info("Starting bot...")
-    await bot.set_my_commands([ 
-        BotCommand(command="/start", description="Start the bot"), 
+    await bot.set_my_commands([
+        BotCommand(command="/start", description="Start the bot"),
         BotCommand(command="/help", description="Help!")
     ])
 
@@ -292,7 +355,8 @@ async def start():
     dp.message.register(menu_handler, F.text.in_(["Invoices", "Main Menu", "Registration"]))
     dp.message.register(handle_contact, F.contact)
     dp.message.register(month_handler, F.text.in_(months))
-    dp.message.register(balance_act_sum_handler, F.text == "📊Balance Act (SUM)")  # Register the new handler
+    dp.message.register(balance_act_sum_handler, F.text == "📊Balance Act (SUM)") 
+    dp.message.register(balance_act_usd_handler, F.text == "📊Balance Act (USD)")
 
     await dp.start_polling(bot)
 
