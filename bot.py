@@ -81,6 +81,61 @@ def export_to_excel(month_name, phone_number):
         logging.error(f"Error: {e}")
         return None
 
+@sync_to_async
+def export_total_sum_to_excel(phone_number):
+    try:
+        # Berilgan telefon raqami uchun barcha mahsulotlarni olish
+        products = Product.objects.filter(
+            company__phone_number=phone_number
+        ).values('id', 'title', 'count', 'price', 'created_at', 'total_price')
+
+        if products:
+            df = pd.DataFrame(list(products))
+
+            # 'created_at' ustunini timezone-naive (vaqt zonasiz) qilish
+            if "created_at" in df.columns:
+                df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
+
+            # 'total_price' ustunining jami summasini hisoblash
+            total_sum = df['total_price'].sum()
+
+            # Jami summa bilan yangi qatorni qo'shish
+            total_sum_row = pd.DataFrame({
+                'id': ['Total'],
+                'title': [''],
+                'count': [''],
+                'price': [''],
+                'created_at': [''],
+                'total_price': [total_sum]
+            })
+
+            # Asl DataFrame-ga jami summa qatorini qo'shish
+            df = pd.concat([df, total_sum_row], ignore_index=True)
+
+            # Excel faylini saqlash
+            file_path = "total_sum.xlsx"
+            df.to_excel(file_path, index=False)
+
+            # Fayl muvaffaqiyatli yaratildimi tekshirish
+            if os.path.exists(file_path):
+                logging.info(f"Fayl yaratildi: {file_path}")
+                return file_path  # Fayl manzilini qaytarish
+            else:
+                logging.error("Fayl yaratishda xatolik yuz berdi!")
+                return None
+        else:
+            logging.warning(f"{phone_number} telefon raqami uchun ma'lumot topilmadi")
+            return None
+    except Exception as e:
+        logging.error(f"Xato: {e}")
+        return None
+
+
+
+
+
+
+
 def phone_number_format(phone_number):
     """
     This function formats a phone number to the international format.
@@ -160,10 +215,6 @@ async def handle_contact(message: Message):
     else:
         await message.answer("Please send your phone number.")
 
-
-
-
-
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
 
@@ -187,6 +238,31 @@ async def month_handler(message: Message):
         await message.answer_document(excel_file, caption=f"Data for the month of {month_name}.")
     else:
         await message.reply("No data found for this month. Please make sure there is data for the selected month or check your database.")
+
+async def balance_act_sum_handler(message: Message):
+    logging.info(f"Balance Act (SUM) handler triggered with text: {message.text}")
+
+    # Check if the user is registered
+    if message.from_user.id not in user_phone_numbers:
+        await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
+        return
+
+    # Get the phone number from the user
+    phone_number = user_phone_numbers.get(message.from_user.id)
+    if not phone_number:
+        await message.reply("You are not a registered user or logged in with another account. Please register first.")
+        return
+
+    # Generate the Excel file with all data and total sum
+    file_path = await export_total_sum_to_excel(phone_number)
+
+    if file_path:
+        excel_file = FSInputFile(file_path)
+        await message.answer_document(excel_file, caption="All products with total sum.")
+    else:
+        await message.reply("No data found. Please make sure there is data in the database.")
+
+
 
 
 
@@ -216,6 +292,7 @@ async def start():
     dp.message.register(menu_handler, F.text.in_(["Invoices", "Main Menu", "Registration"]))
     dp.message.register(handle_contact, F.contact)
     dp.message.register(month_handler, F.text.in_(months))
+    dp.message.register(balance_act_sum_handler, F.text == "📊Balance Act (SUM)")  # Register the new handler
 
     await dp.start_polling(bot)
 
