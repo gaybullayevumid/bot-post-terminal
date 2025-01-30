@@ -260,6 +260,34 @@ async def handle_contact(message: Message):
     else:
         await message.answer("Please send your phone number.")
 
+# About the Company handler
+async def about_company_handler(message: Message):
+    logging.info(f"About the Company handler triggered with text: {message.text}")
+    
+    # Kampaniya haqida ma'lumot (qo'lda yozilgan)
+    company_info = (
+        "🏢 Company Name: Example Company\n"
+        "📍 Address: Navoiy, Uzbekistan\n"
+        "📞 Phone: +998930850955\n"
+        "🌐 Website: www.example.com\n"
+        "📧 Email: info@example.com\n"
+        "📝 Description: We are a leading company in the industry, providing high-quality services and products."
+    )
+    
+    await message.answer(company_info)
+
+async def phone_handler(message: Message):
+    logging.info(f"About the Company handler triggered with text: {message.text}")
+    
+    # Kampaniya haqida ma'lumot (qo'lda yozilgan)
+    phone_info = (
+        "Tel:\n"
+        "+998912518505 Umid\n"
+        "+998912518505 Umid"
+    )
+    
+    await message.answer(phone_info)
+
 # Month handler
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
@@ -355,8 +383,10 @@ async def start():
     dp.message.register(menu_handler, F.text.in_(["Invoices", "Main Menu", "Registration"]))
     dp.message.register(handle_contact, F.contact)
     dp.message.register(month_handler, F.text.in_(months))
-    dp.message.register(balance_act_sum_handler, F.text == "📊Balance Act (SUM)") 
+    dp.message.register(balance_act_sum_handler, F.text == "📊Balance Act (SUM)")  # SUM uchun handler
     dp.message.register(balance_act_usd_handler, F.text == "📊Balance Act (USD)")
+    dp.message.register(about_company_handler, F.text == "📜About the Company")
+    dp.message.register(phone_handler, F.text == "☎️Contacts")
 
     await dp.start_polling(bot)
 
