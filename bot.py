@@ -32,24 +32,12 @@ months = [
 
 # Keyboards
 keyboards = {
-    "main": ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Invoices")],
-            [KeyboardButton(text="📊Balance Act (SUM)"), KeyboardButton(text="📊Balance Act (USD)"), KeyboardButton(text="☎️Contacts")],
-            [KeyboardButton(text="📜About the Company")]
-        ],
-        resize_keyboard=True
-    ),
     "months": ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=m) for m in months[i:i + 3]] for i in range(0, 12, 3)] + [[KeyboardButton(text="Main Menu")]],
         resize_keyboard=True
     ),
     "request_contact": ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Send phone number", request_contact=True)]],
-        resize_keyboard=True
-    ),
-    "registration_only": ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Registration")]],
         resize_keyboard=True
     ),
 }
@@ -115,7 +103,7 @@ def export_to_excel(month_name, phone_number):
         logging.error(f"Error: {e}")
         return None
 
-# Async function to export total sum to Excel with USD
+# Async function to export total sum to Excel with SUM
 @sync_to_async
 def export_total_sum_to_excel_sum(phone_number):
     try:
@@ -128,10 +116,7 @@ def export_total_sum_to_excel_sum(phone_number):
             if "created_at" in df.columns:
                 df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
 
-            # Jami summani hisoblash
             total_sum = df['total_price'].sum()
-
-            # Jami summa bilan yangi qatorni qo'shish (SUM)
             total_sum_row = pd.DataFrame({
                 'id': ['Total (SUM)'],
                 'title': [''],
@@ -141,10 +126,7 @@ def export_total_sum_to_excel_sum(phone_number):
                 'total_price': [total_sum]
             })
 
-            # Asl DataFrame-ga jami summa qatorini qo'shish
             df = pd.concat([df, total_sum_row], ignore_index=True)
-
-            # Excel faylini saqlash
             file_path = "total_sum_sum.xlsx"
             df.to_excel(file_path, index=False)
 
@@ -161,15 +143,7 @@ def export_total_sum_to_excel_sum(phone_number):
         logging.error(f"Error: {e}")
         return None
 
-
-
-
-
-# Registration process tracker
-user_registration_status = {}
-user_phone_numbers = {}
-
-
+# Async function to export total sum to Excel with USD
 @sync_to_async
 def export_total_sum_to_excel_usd(phone_number):
     try:
@@ -182,14 +156,10 @@ def export_total_sum_to_excel_usd(phone_number):
             if "created_at" in df.columns:
                 df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
 
-            # Jami summani hisoblash
             total_sum = df['total_price'].sum()
-
-            # Jami summani USD ga aylantirish
             exchange_rate = 11000  # 1 USD = 11000 SUM
             total_usd = total_sum / exchange_rate
 
-            # Jami summa bilan yangi qatorni qo'shish (USD)
             total_usd_row = pd.DataFrame({
                 'id': ['Total (USD)'],
                 'title': [''],
@@ -199,10 +169,7 @@ def export_total_sum_to_excel_usd(phone_number):
                 'total_price': [total_usd]
             })
 
-            # Asl DataFrame-ga jami summa qatorini qo'shish
             df = pd.concat([df, total_usd_row], ignore_index=True)
-
-            # Excel faylini saqlash
             file_path = "total_sum_usd.xlsx"
             df.to_excel(file_path, index=False)
 
@@ -219,21 +186,43 @@ def export_total_sum_to_excel_usd(phone_number):
         logging.error(f"Error: {e}")
         return None
 
+# Registration process tracker
+user_registration_status = {}
+user_phone_numbers = {}
+
 # Menu handler
 async def menu_handler(message: Message):
     logging.info(f"Menu handler triggered with text: {message.text}")
-    if message.from_user.id not in user_phone_numbers:
-        if message.text == "Registration":
-            user_registration_status[message.from_user.id] = True
-            await message.answer("Iltimos, telefon raqamingizni yuboring.", reply_markup=keyboards["request_contact"])
-        else:
-            await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
-        return
+    
+    # Agar foydalanuvchi ro'yxatdan o'tgan bo'lsa, "Registration" tugmasini ko'rsatma
+    if message.from_user.id in user_phone_numbers:
+        main_keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="Invoices")],
+                [KeyboardButton(text="📊Balance Act (SUM)"), KeyboardButton(text="📊Balance Act (USD)"), KeyboardButton(text="☎️Contacts")],
+                [KeyboardButton(text="📜About the Company")]
+            ],
+            resize_keyboard=True
+        )
+    else:
+        # Agar foydalanuvchi ro'yxatdan o'tmagan bo'lsa, "Registration" tugmasini ko'rsat
+        main_keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="Registration")]
+            ],
+            resize_keyboard=True
+        )
 
     if message.text == "Invoices":
         await message.answer("Select the month:", reply_markup=keyboards["months"])
     elif message.text == "Main Menu":
-        await message.answer("Main menu:", reply_markup=keyboards["main"])
+        await message.answer("Main menu:", reply_markup=main_keyboard)
+    elif message.text == "Registration":
+        if message.from_user.id not in user_phone_numbers:
+            user_registration_status[message.from_user.id] = True
+            await message.answer("Iltimos, telefon raqamingizni yuboring.", reply_markup=keyboards["request_contact"])
+        else:
+            await message.answer("You are already registered.", reply_markup=main_keyboard)
 
 # Contact handler
 async def handle_contact(message: Message):
@@ -249,7 +238,14 @@ async def handle_contact(message: Message):
             company = await check_company(phone_number, message.from_user.id)
 
             if company:
-                await message.answer(f"Your phone number {phone_number} has been successfully registered. Welcome!", reply_markup=keyboards["main"])
+                await message.answer(f"Your phone number {phone_number} has been successfully registered. Welcome!", reply_markup=ReplyKeyboardMarkup(
+                    keyboard=[
+                        [KeyboardButton(text="Invoices")],
+                        [KeyboardButton(text="📊Balance Act (SUM)"), KeyboardButton(text="📊Balance Act (USD)"), KeyboardButton(text="☎️Contacts")],
+                        [KeyboardButton(text="📜About the Company")]
+                    ],
+                    resize_keyboard=True
+                ))
                 user_phone_numbers[message.from_user.id] = phone_number
             else:
                 await message.answer("Your phone number was not found in the database or is registered with another company. Please contact the administration.")
@@ -263,8 +259,6 @@ async def handle_contact(message: Message):
 # About the Company handler
 async def about_company_handler(message: Message):
     logging.info(f"About the Company handler triggered with text: {message.text}")
-    
-    # Kampaniya haqida ma'lumot (qo'lda yozilgan)
     company_info = (
         "🏢 Company Name: Example Company\n"
         "📍 Address: Navoiy, Uzbekistan\n"
@@ -273,26 +267,26 @@ async def about_company_handler(message: Message):
         "📧 Email: info@example.com\n"
         "📝 Description: We are a leading company in the industry, providing high-quality services and products."
     )
-    
     await message.answer(company_info)
 
+# Contacts handler
 async def phone_handler(message: Message):
-    logging.info(f"About the Company handler triggered with text: {message.text}")
-    
-    # Kampaniya haqida ma'lumot (qo'lda yozilgan)
+    logging.info(f"Contacts handler triggered with text: {message.text}")
     phone_info = (
         "Tel:\n"
         "+998912518505 Umid\n"
         "+998912518505 Umid"
     )
-    
     await message.answer(phone_info)
 
 # Month handler
 async def month_handler(message: Message):
     logging.info(f"Month handler triggered with text: {message.text}")
     if message.from_user.id not in user_phone_numbers:
-        await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
+        await message.answer("You are not registered. Please register first.", reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="Registration")]],
+            resize_keyboard=True
+        ))
         return
 
     phone_number = user_phone_numbers.get(message.from_user.id)
@@ -313,7 +307,10 @@ async def month_handler(message: Message):
 async def balance_act_sum_handler(message: Message):
     logging.info(f"Balance Act (SUM) handler triggered with text: {message.text}")
     if message.from_user.id not in user_phone_numbers:
-        await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
+        await message.answer("You are not registered. Please register first.", reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="Registration")]],
+            resize_keyboard=True
+        ))
         return
 
     phone_number = user_phone_numbers.get(message.from_user.id)
@@ -321,7 +318,6 @@ async def balance_act_sum_handler(message: Message):
         await message.reply("You are not a registered user or logged in with another account. Please register first.")
         return
 
-    # SUM uchun Excel faylini yaratish
     file_path = await export_total_sum_to_excel_sum(phone_number)
 
     if file_path:
@@ -334,7 +330,10 @@ async def balance_act_sum_handler(message: Message):
 async def balance_act_usd_handler(message: Message):
     logging.info(f"Balance Act (USD) handler triggered with text: {message.text}")
     if message.from_user.id not in user_phone_numbers:
-        await message.answer("You are not registered. Please register first.", reply_markup=keyboards["registration_only"])
+        await message.answer("You are not registered. Please register first.", reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="Registration")]],
+            resize_keyboard=True
+        ))
         return
 
     phone_number = user_phone_numbers.get(message.from_user.id)
@@ -342,7 +341,6 @@ async def balance_act_usd_handler(message: Message):
         await message.reply("You are not a registered user or logged in with another account. Please register first.")
         return
 
-    # USD uchun Excel faylini yaratish
     file_path = await export_total_sum_to_excel_usd(phone_number)
 
     if file_path:
@@ -350,10 +348,6 @@ async def balance_act_usd_handler(message: Message):
         await message.answer_document(excel_file, caption="All products with total sum in USD.")
     else:
         await message.reply("No data found. Please make sure there is data in the database.")
-
-
-
-
 
 # Help handler
 async def help_handler(message: Message):
@@ -369,7 +363,21 @@ async def help_handler(message: Message):
 # Start handler
 async def start_handler(message: Message):
     logging.info("Start command triggered.")
-    await message.answer("Welcome! Please register to continue.", reply_markup=keyboards["registration_only"])
+    if message.from_user.id in user_phone_numbers:
+        await message.answer("Welcome back!", reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="Invoices")],
+                [KeyboardButton(text="📊Balance Act (SUM)"), KeyboardButton(text="📊Balance Act (USD)"), KeyboardButton(text="☎️Contacts")],
+                [KeyboardButton(text="📜About the Company")]
+            ],
+            resize_keyboard=True
+        ))
+    else:
+        await message.answer("Welcome! Please register to continue.", reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="Registration")]],
+            resize_keyboard=True
+        ))
+
 # Main start function
 async def start():
     logging.info("Starting bot...")
@@ -383,7 +391,7 @@ async def start():
     dp.message.register(menu_handler, F.text.in_(["Invoices", "Main Menu", "Registration"]))
     dp.message.register(handle_contact, F.contact)
     dp.message.register(month_handler, F.text.in_(months))
-    dp.message.register(balance_act_sum_handler, F.text == "📊Balance Act (SUM)")  # SUM uchun handler
+    dp.message.register(balance_act_sum_handler, F.text == "📊Balance Act (SUM)")
     dp.message.register(balance_act_usd_handler, F.text == "📊Balance Act (USD)")
     dp.message.register(about_company_handler, F.text == "📜About the Company")
     dp.message.register(phone_handler, F.text == "☎️Contacts")
