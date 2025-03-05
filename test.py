@@ -181,15 +181,18 @@ async def nakladnaya_button_handler(message: Message, state: FSMContext):
         await state.set_state(Form.phone_number)
         return
 
+    # Arrange months in a 3x4 grid
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=month)] for month in months
+            [KeyboardButton(text=months[i]), KeyboardButton(text=months[i+1]), KeyboardButton(text=months[i+2])]
+            for i in range(0, len(months), 3)
         ] + [[KeyboardButton(text="Главная")]],  # Добавляем кнопку "Главная"
         resize_keyboard=True,
         one_time_keyboard=True
     )
     await message.answer("Выберите месяц:", reply_markup=keyboard)
     await state.set_state(Form.month)
+
 
 # Month handler
 async def month_handler(message: Message, state: FSMContext):
