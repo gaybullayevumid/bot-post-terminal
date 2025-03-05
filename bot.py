@@ -1,4 +1,3 @@
-import os
 import logging
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import BotCommand, Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
@@ -60,83 +59,113 @@ def get_db_connection():
 
 # Async function to check company
 async def check_company(phone_number, chat_id):
-    logging.info(f"Проверка компании для номера телефона: {phone_number}")
+    formatted_phone_number = phone_number_format(phone_number)
+    logging.info(f"Проверка компании для номера телефона: {formatted_phone_number}")
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=DictCursor) as cursor:
-            cursor.execute("SELECT * FROM base_company WHERE phone_number = %s", (phone_number,))
-            company = cursor.fetchone()
+            cursor.execute("""
+                SELECT * FROM dir_customers
+                WHERE %s IN (cstm_phone, cstm_phone2, cstm_phone3, cstm_phone4)
+            """, (formatted_phone_number,))
+            customer = cursor.fetchone()
 
-            if company:
-                if company['chat_id'] is None:
-                    cursor.execute("UPDATE base_company SET chat_id = %s WHERE id = %s", (chat_id, company['id']))
+            if customer:
+                if customer.get('chat_id') is None:
+                    cursor.execute("UPDATE dir_customers SET chat_id = %s WHERE cstm_id = %s", (chat_id, customer['cstm_id']))
                     conn.commit()
-                    logging.info(f"Chat ID обновлен для компании: {company['name']}")
-                elif company['chat_id'] == chat_id:
-                    logging.info(f"Компания с номером телефона {phone_number} уже зарегистрирована с этим chat_id.")
-                return company
+                    logging.info(f"Chat ID обновлен для клиента: {customer['cstm_name']}")
+                elif customer.get('chat_id') == chat_id:
+                    logging.info(f"Клиент с номером телефона {formatted_phone_number} уже зарегистрирован с этим chat_id.")
+                return customer
             else:
-                logging.warning(f"Компания с номером телефона {phone_number} не найдена.")
+                logging.warning(f"Клиент с номером телефона {formatted_phone_number} не найден.")
                 return None
     except Exception as e:
-        logging.error(f"Ошибка при проверке компании: {e}")
+        logging.error(f"Ошибка при проверке клиента: {e}")
         return None
     finally:
         if conn:
             conn.close()
 
-# Async function to export data to Excel
-async def export_to_excel(phone_number, month_name=None, currency=None):
+# Function to export data to Excel
+def export_to_excel(phone_number, month_name=None, currency=None):
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=DictCursor) as cursor:
             query = """
-                SELECT id, title, count, price, created_at, total_price
-                FROM base_product
-                WHERE company_id IN (SELECT id FROM base_company WHERE phone_number = %s)
+                SELECT
+                    o.obj_name AS "Магазин/Склад",
+                    g.gd_code AS "Код",
+                    g.gd_name AS "Номенклатура",
+                    s.sls_datetime AS "Дата/Время",
+                    'Продажа' AS "Тип",
+                    op.opr_quantity AS "Количество",
+                    a.oap_price1 AS "Цена",
+                    (op.opr_quantity * a.oap_price1) AS "Сумма"
+                FROM doc_sales s
+                JOIN operations op
+                    ON op.opr_document = s.sls_id AND op.opr_type = 2 -- 2 обычно означает операцию «Продажа»
+                JOIN operations_additional_prop a
+                    ON a.oap_operation = op.opr_id
+                JOIN dir_goods g
+                    ON g.gd_id = op.opr_good
+                JOIN dir_objects o
+                    ON o.obj_id = s.sls_object
+                JOIN dir_customers c
+                    ON c.cstm_id = s.sls_customer
+                WHERE %s IN (c.cstm_phone, c.cstm_phone2, c.cstm_phone3, c.cstm_phone4)
+                    AND s.sls_datetime BETWEEN '2015-01-01' AND '2044-06-15'
+                    AND s.sls_performed = 1
+                    AND s.sls_deleted = 0
             """
             params = [phone_number]
 
             if month_name:
                 month_index = months.index(month_name) + 1
-                query += " AND EXTRACT(MONTH FROM created_at) = %s"
+                query += " AND EXTRACT(MONTH FROM s.sls_datetime) = %s"
                 params.append(month_index)
 
+            logging.info(f"Executing query: {query} with params: {params}")
             cursor.execute(query, params)
             products = cursor.fetchall()
 
             if not products:
-                logging.warning(f"Данные для номера телефона {phone_number} не найдены")
+                logging.warning(f"Данные для номера телефона {phone_number} за месяц {month_name} не найдены")
                 return None
 
-            df = pd.DataFrame(products, columns=['id', 'title', 'count', 'price', 'created_at', 'total_price'])
-            df["created_at"] = pd.to_datetime(df["created_at"]).dt.tz_localize(None)
+            df = pd.DataFrame(products, columns=['Магазин/Склад', 'Код', 'Номенклатура', 'Дата/Время', 'Тип', 'Количество', 'Цена', 'Сумма'])
+            df["Дата/Время"] = pd.to_datetime(df["Дата/Время"]).dt.tz_localize(None)
 
             if currency == "SUM":
-                total_sum = df['total_price'].sum()
+                total_sum = df['Сумма'].sum()
                 total_sum_row = pd.DataFrame({
-                    'id': ['Итого (SUM)'],
-                    'title': [''],
-                    'count': [''],
-                    'price': [''],
-                    'created_at': [''],
-                    'total_price': [total_sum]
+                    'Магазин/Склад': ['Итого (SUM)'],
+                    'Код': [''],
+                    'Номенклатура': [''],
+                    'Дата/Время': [''],
+                    'Тип': [''],
+                    'Количество': [''],
+                    'Цена': [''],
+                    'Сумма': [total_sum]
                 })
                 df = pd.concat([df, total_sum_row], ignore_index=True)
                 file_path = "total_sum_sum.xlsx"
             elif currency == "USD":
-                total_sum = df['total_price'].sum()
+                total_sum = df['Сумма'].sum()
                 exchange_rate = 11000  # 1 USD = 11000 SUM
                 total_usd = total_sum / exchange_rate
                 total_usd_row = pd.DataFrame({
-                    'id': ['Итого (USD)'],
-                    'title': [''],
-                    'count': [''],
-                    'price': [''],
-                    'created_at': [''],
-                    'total_price': [total_usd]
+                    'Магазин/Склад': ['Итого (USD)'],
+                    'Код': [''],
+                    'Номенклатура': [''],
+                    'Дата/Время': [''],
+                    'Тип': [''],
+                    'Количество': [''],
+                    'Цена': [''],
+                    'Сумма': [total_usd]
                 })
                 df = pd.concat([df, total_usd_row], ignore_index=True)
                 file_path = "total_sum_usd.xlsx"
@@ -153,57 +182,18 @@ async def export_to_excel(phone_number, month_name=None, currency=None):
         if conn:
             conn.close()
 
-# Registration process tracker
-user_registration_status = {}
-user_phone_numbers = {}
-
 # Start handler
 async def start_handler(message: Message):
     logging.info("Команда старта вызвана.")
-    if message.from_user.id in user_phone_numbers:
-        await message.answer("С возвращением!", reply_markup=ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="Накладные")],
-                [KeyboardButton(text="📊Балансовый акт (SUM)"), KeyboardButton(text="📊Балансовый акт (USD)"), KeyboardButton(text="☎️Контакты")],
-                [KeyboardButton(text="📜О компании")]
-            ],
-            resize_keyboard=True
-        ))
-    else:
-        await message.answer("Добро пожаловать! Пожалуйста, зарегистрируйтесь, чтобы продолжить.", reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="Регистрация")]],
-            resize_keyboard=True
-        ))
+    await message.answer("Добро пожаловать! Пожалуйста, отправьте ваш номер телефона.", reply_markup=keyboards["request_contact"])
 
 # Menu handler
 async def menu_handler(message: Message):
     logging.info(f"Обработчик меню вызван с текстом: {message.text}")
-    if message.from_user.id in user_phone_numbers:
-        main_keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="Накладные")],
-                [KeyboardButton(text="📊Балансовый акт (SUM)"), KeyboardButton(text="📊Балансовый акт (USD)"), KeyboardButton(text="☎️Контакты")],
-                [KeyboardButton(text="📜О компании")]
-            ],
-            resize_keyboard=True
-        )
-    else:
-        main_keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="Регистрация")]
-            ],
-            resize_keyboard=True
-        )
     if message.text == "Накладные":
         await message.answer("Выберите месяц:", reply_markup=keyboards["months"])
     elif message.text == "Главное меню":
-        await message.answer("Главное меню:", reply_markup=main_keyboard)
-    elif message.text == "Регистрация":
-        if message.from_user.id not in user_phone_numbers:
-            user_registration_status[message.from_user.id] = True
-            await message.answer("Пожалуйста, отправьте ваш номер телефона.", reply_markup=keyboards["request_contact"])
-        else:
-            await message.answer("Вы уже зарегистрированы.", reply_markup=main_keyboard)
+        await message.answer("Главное меню:", reply_markup=keyboards["request_contact"])
 
 # Contact handler
 async def handle_contact(message: Message):
@@ -211,25 +201,29 @@ async def handle_contact(message: Message):
         if message.contact.user_id != message.from_user.id:
             await message.answer("Пожалуйста, отправьте только свой номер телефона!")
             return
+
         phone_number = phone_number_format(message.contact.phone_number)
         logging.info(f"Получен номер телефона: {phone_number}")
-        if user_registration_status.get(message.from_user.id, False):
-            company = await check_company(phone_number, message.from_user.id)
-            if company:
-                await message.answer(f"Ваш номер телефона {phone_number} успешно зарегистрирован. Добро пожаловать!", reply_markup=ReplyKeyboardMarkup(
+
+        customer = await check_company(phone_number, message.from_user.id)
+
+        if customer:
+            await message.answer(
+                f"Ваш номер телефона {phone_number} успешно зарегистрирован. Добро пожаловать!",
+                reply_markup=ReplyKeyboardMarkup(
                     keyboard=[
                         [KeyboardButton(text="Накладные")],
                         [KeyboardButton(text="📊Балансовый акт (SUM)"), KeyboardButton(text="📊Балансовый акт (USD)"), KeyboardButton(text="☎️Контакты")],
                         [KeyboardButton(text="📜О компании")]
                     ],
                     resize_keyboard=True
-                ))
-                user_phone_numbers[message.from_user.id] = phone_number
-            else:
-                await message.answer("Ваш номер телефона не найден в базе данных или зарегистрирован на другую компанию. Пожалуйста, свяжитесь с администрацией.")
-                user_registration_status[message.from_user.id] = False
+                )
+            )
         else:
-            await message.answer("Вы можете отправить свой номер телефона только во время регистрации. Пожалуйста, нажмите кнопку 'Регистрация'.")
+            await message.answer(
+                f"Ваш номер телефона {phone_number} не найден в базе данных. Пожалуйста, убедитесь, что вы зарегистрированы.",
+                reply_markup=keyboards["request_contact"]
+            )
     else:
         await message.answer("Пожалуйста, отправьте ваш номер телефона.")
 
@@ -259,38 +253,28 @@ async def phone_handler(message: Message):
 # Month handler
 async def month_handler(message: Message):
     logging.info(f"Обработчик месяца вызван с текстом: {message.text}")
-    if message.from_user.id not in user_phone_numbers:
-        await message.answer("Вы не зарегистрированы. Пожалуйста, зарегистрируйтесь сначала.", reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="Регистрация")]],
-            resize_keyboard=True
-        ))
-        return
-    phone_number = user_phone_numbers.get(message.from_user.id)
+    phone_number = message.from_user.contact.phone_number
     if not phone_number:
-        await message.reply("Вы не зарегистрированный пользователь или вошли в систему с другого аккаунта. Пожалуйста, зарегистрируйтесь сначала.")
+        await message.reply("Вы не зарегистрированный пользователь или вошли в систему с другого аккаунта. Пожалуйста, отправьте ваш номер телефона.")
         return
     month_name = message.text
-    file_path = await export_to_excel(phone_number, month_name)
+    file_path = export_to_excel(phone_number, month_name)
     if file_path:
         excel_file = FSInputFile(file_path)
         await message.answer_document(excel_file, caption=f"Данные за месяц {month_name}.")
     else:
-        await message.reply("Данные за этот месяц не найдены. Пожалуйста, убедитесь, что есть данные за выбранный месяц или проверьте вашу базу данных.")
+        await message.reply(
+            f"Данные за месяц {month_name} не найдены. Пожалуйста, убедитесь, что есть данные за выбранный месяц или проверьте вашу базу данных."
+        )
 
 # Balance Act (SUM) handler
 async def balance_act_sum_handler(message: Message):
     logging.info(f"Обработчик балансового акта (SUM) вызван с текстом: {message.text}")
-    if message.from_user.id not in user_phone_numbers:
-        await message.answer("Вы не зарегистрированы. Пожалуйста, зарегистрируйтесь сначала.", reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="Регистрация")]],
-            resize_keyboard=True
-        ))
-        return
-    phone_number = user_phone_numbers.get(message.from_user.id)
+    phone_number = message.from_user.contact.phone_number
     if not phone_number:
-        await message.reply("Вы не зарегистрированный пользователь или вошли в систему с другого аккаунта. Пожалуйста, зарегистрируйтесь сначала.")
+        await message.reply("Вы не зарегистрированный пользователь или вошли в систему с другого аккаунта. Пожалуйста, отправьте ваш номер телефона.")
         return
-    file_path = await export_to_excel(phone_number, currency="SUM")
+    file_path = export_to_excel(phone_number, currency="SUM")
     if file_path:
         excel_file = FSInputFile(file_path)
         await message.answer_document(excel_file, caption="Все продукты с итоговой суммой в SUM.")
@@ -300,17 +284,11 @@ async def balance_act_sum_handler(message: Message):
 # Balance Act (USD) handler
 async def balance_act_usd_handler(message: Message):
     logging.info(f"Обработчик балансового акта (USD) вызван с текстом: {message.text}")
-    if message.from_user.id not in user_phone_numbers:
-        await message.answer("Вы не зарегистрированы. Пожалуйста, зарегистрируйтесь сначала.", reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="Регистрация")]],
-            resize_keyboard=True
-        ))
-        return
-    phone_number = user_phone_numbers.get(message.from_user.id)
+    phone_number = message.from_user.contact.phone_number
     if not phone_number:
-        await message.reply("Вы не зарегистрированный пользователь или вошли в систему с другого аккаунта. Пожалуйста, зарегистрируйтесь сначала.")
+        await message.reply("Вы не зарегистрированный пользователь или вошли в систему с другого аккаунта. Пожалуйста, отправьте ваш номер телефона.")
         return
-    file_path = await export_to_excel(phone_number, currency="USD")
+    file_path = export_to_excel(phone_number, currency="USD")
     if file_path:
         excel_file = FSInputFile(file_path)
         await message.answer_document(excel_file, caption="Все продукты с итоговой суммой в USD.")
@@ -338,7 +316,7 @@ async def start():
         ])
         dp.message.register(start_handler, Command("start"))
         dp.message.register(help_handler, Command("help"))
-        dp.message.register(menu_handler, F.text.in_(["Накладные", "Главное меню", "Регистрация"]))
+        dp.message.register(menu_handler, F.text.in_(["Накладные", "Главное меню"]))
         dp.message.register(handle_contact, F.contact)
         dp.message.register(month_handler, F.text.in_(months))
         dp.message.register(balance_act_sum_handler, F.text == "📊Балансовый акт (SUM)")
