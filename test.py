@@ -146,15 +146,7 @@ async def phone_number_handler(message: Message, state: FSMContext):
 
             if customer:
                 await state.update_data(phone_number=phone_number)  # Save phone number in state
-                keyboard = ReplyKeyboardMarkup(
-                    keyboard=[
-                        [KeyboardButton(text="Накладные")],
-                        [KeyboardButton(text="Помощь")]
-                    ],
-                    resize_keyboard=True,
-                    one_time_keyboard=True
-                )
-                await message.answer(f"Ваш номер телефона {phone_number} успешно зарегистрирован. Выберите действие:", reply_markup=keyboard)
+                await main_menu_handler(message, state)
             else:
                 await message.answer(f"Ваш номер телефона {phone_number} не найден в базе данных. Пожалуйста, убедитесь, что вы зарегистрированы.")
                 await state.clear()
@@ -165,6 +157,18 @@ async def phone_number_handler(message: Message, state: FSMContext):
     finally:
         if conn:
             conn.close()
+
+# Main menu handler
+async def main_menu_handler(message: Message, state: FSMContext):
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Накладные")],
+            [KeyboardButton(text="Помощь")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    await message.answer("Выберите действие:", reply_markup=keyboard)
 
 # Накладные button handler
 async def nakladnaya_button_handler(message: Message, state: FSMContext):
@@ -180,7 +184,7 @@ async def nakladnaya_button_handler(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=month)] for month in months
-        ],
+        ] + [[KeyboardButton(text="Главная")]],  # Добавляем кнопку "Главная"
         resize_keyboard=True,
         one_time_keyboard=True
     )
@@ -191,13 +195,18 @@ async def nakladnaya_button_handler(message: Message, state: FSMContext):
 async def month_handler(message: Message, state: FSMContext):
     user_data = await state.get_data()
     phone_number = user_data.get("phone_number")
+    month_name = message.text
+
+    if month_name == "Главная":
+        await message.answer("Вы вернулись в главное меню.", reply_markup=ReplyKeyboardRemove())
+        await main_menu_handler(message, state)
+        return
 
     if not phone_number:
         await message.answer("Пожалуйста, сначала отправьте ваш номер телефона в формате +998XXXXXXXXX.")
         await state.set_state(Form.phone_number)
         return
 
-    month_name = message.text
     file_path = export_to_excel(phone_number, month_name)
     if file_path:
         excel_file = FSInputFile(file_path)
@@ -232,7 +241,7 @@ async def start():
         dp.message.register(help_handler, Command("help"))
         dp.message.register(nakladnaya_button_handler, F.text == "Накладные")  # Обработка кнопки "Накладные"
         dp.message.register(phone_number_handler, F.text.startswith("+998") | F.text.startswith("998"))
-        dp.message.register(month_handler, F.text.in_(months))
+        dp.message.register(month_handler, F.text.in_(months + ["Главная"]))
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
