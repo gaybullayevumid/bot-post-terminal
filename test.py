@@ -1,6 +1,6 @@
 import logging
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import BotCommand, Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import BotCommand, Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -117,7 +117,10 @@ def export_to_excel(phone_number, month_name=None):
 # Start handler
 async def start_handler(message: Message, state: FSMContext):
     logging.info("Команда старта вызвана.")
-    await message.answer("Добро пожаловать! Пожалуйста, отправьте ваш номер телефона в формате +998XXXXXXXXX.")
+    await message.answer(
+        "Добро пожаловать! Пожалуйста, отправьте ваш номер телефона в формате +998XXXXXXXXX.",
+        reply_markup=ReplyKeyboardRemove()  # Убираем клавиатуру
+    )
     await state.set_state(Form.phone_number)
 
 # Phone number handler
@@ -145,13 +148,13 @@ async def phone_number_handler(message: Message, state: FSMContext):
                 await state.update_data(phone_number=phone_number)  # Save phone number in state
                 keyboard = ReplyKeyboardMarkup(
                     keyboard=[
-                        [KeyboardButton(text=month)] for month in months
+                        [KeyboardButton(text="Накладные")],
+                        [KeyboardButton(text="Помощь")]
                     ],
                     resize_keyboard=True,
                     one_time_keyboard=True
                 )
-                await message.answer(f"Ваш номер телефона {phone_number} успешно зарегистрирован. Выберите месяц:", reply_markup=keyboard)
-                await state.set_state(Form.month)
+                await message.answer(f"Ваш номер телефона {phone_number} успешно зарегистрирован. Выберите действие:", reply_markup=keyboard)
             else:
                 await message.answer(f"Ваш номер телефона {phone_number} не найден в базе данных. Пожалуйста, убедитесь, что вы зарегистрированы.")
                 await state.clear()
@@ -162,6 +165,27 @@ async def phone_number_handler(message: Message, state: FSMContext):
     finally:
         if conn:
             conn.close()
+
+# Накладные button handler
+async def nakladnaya_button_handler(message: Message, state: FSMContext):
+    logging.info("Кнопка 'Накладные' нажата.")
+    user_data = await state.get_data()
+    phone_number = user_data.get("phone_number")
+
+    if not phone_number:
+        await message.answer("Пожалуйста, сначала отправьте ваш номер телефона в формате +998XXXXXXXXX.")
+        await state.set_state(Form.phone_number)
+        return
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=month)] for month in months
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    await message.answer("Выберите месяц:", reply_markup=keyboard)
+    await state.set_state(Form.month)
 
 # Month handler
 async def month_handler(message: Message, state: FSMContext):
@@ -182,7 +206,8 @@ async def month_handler(message: Message, state: FSMContext):
         await message.reply(
             f"Данные за месяц {month_name} не найдены. Пожалуйста, убедитесь, что есть данные за выбранный месяц или проверьте вашу базу данных."
         )
-    await state.clear()  # Clear state after completion
+    # State ni tozalashni cheklash
+    await state.set_state(Form.month)  # State ni o'zgartirmasdan qoldiramiz
 
 # Help handler
 async def help_handler(message: Message):
@@ -205,6 +230,7 @@ async def start():
         ])
         dp.message.register(start_handler, Command("start"))
         dp.message.register(help_handler, Command("help"))
+        dp.message.register(nakladnaya_button_handler, F.text == "Накладные")  # Обработка кнопки "Накладные"
         dp.message.register(phone_number_handler, F.text.startswith("+998") | F.text.startswith("998"))
         dp.message.register(month_handler, F.text.in_(months))
         await dp.start_polling(bot)
