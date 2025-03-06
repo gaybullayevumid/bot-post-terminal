@@ -67,7 +67,8 @@ def export_to_excel(phone_number, month_name=None):
                     'Продажа' AS "Тип",
                     op.opr_quantity AS "Количество",
                     a.oap_price1 AS "Цена",
-                    (op.opr_quantity * a.oap_price1) AS "Сумма"
+                    (op.opr_quantity * a.oap_price1) AS "Сумма",
+                    dss.sords_name AS "Статус оплаты"
                 FROM doc_sales s
                 JOIN operations op
                     ON op.opr_document = s.sls_id AND op.opr_type = 2
@@ -79,10 +80,13 @@ def export_to_excel(phone_number, month_name=None):
                     ON o.obj_id = s.sls_object
                 JOIN dir_customers c
                     ON c.cstm_id = s.sls_customer
+                JOIN dir_sales_status dss
+                    ON dss.sords_id = s.sls_status
                 WHERE s.sls_datetime BETWEEN '2015-01-01' AND '2044-06-15'
                     AND s.sls_performed = 1
                     AND s.sls_deleted = 0
                     AND %s IN (c.cstm_phone, c.cstm_phone2, c.cstm_phone3, c.cstm_phone4)
+                    AND dss.sords_name != 'Завершен'  -- Статус "Завершен" bo'lgan yozuvlarni hisobga olmaslik
             """
             params = [phone_number]
 
@@ -100,7 +104,7 @@ def export_to_excel(phone_number, month_name=None):
                 logging.warning(f"Данные для номера телефона {phone_number} за месяц {month_name} не найдены")
                 return None
 
-            df = pd.DataFrame(products, columns=['Магазин/Склад', 'Код', 'Номенклатура', 'Дата/Время', 'Тип', 'Количество', 'Цена', 'Сумма'])
+            df = pd.DataFrame(products, columns=['Магазин/Склад', 'Код', 'Номенклатура', 'Дата/Время', 'Тип', 'Количество', 'Цена', 'Сумма', 'Статус оплаты'])
             df["Дата/Время"] = pd.to_datetime(df["Дата/Время"]).dt.tz_localize(None)
 
             file_path = f"invoice_{month_name.lower()}.xlsx" if month_name else "invoice.xlsx"
