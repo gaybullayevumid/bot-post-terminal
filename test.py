@@ -9,7 +9,7 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import DictCursor
 
-# Database connection settings
+
 DB_SETTINGS = {
     'dbname': 'avtolider',
     'user': 'postgres',
@@ -18,41 +18,41 @@ DB_SETTINGS = {
     'port': 5432
 }
 
-# Bot token
+
 BOT_TOKEN = "7769778979:AAFNG8nuj0m2rbWbJFHz8Jb2-FHS_Bv5qIc"
 
-# Initialize bot and dispatcher
+
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
-# Logging configuration
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Months list
+
 months = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
 ]
 
-# Define states
+
 class Form(StatesGroup):
     phone_number = State()
     month = State()
 
-# Helper function to format phone number
+
 def phone_number_format(phone_number):
     phone_number = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
     if phone_number.startswith("998"):
-        phone_number = phone_number  # Leave as is
+        phone_number = phone_number
     elif phone_number.startswith("+998"):
-        phone_number = phone_number[1:]  # Remove +
+        phone_number = phone_number[1:]
     return phone_number
 
-# Function to get database connection
+
 def get_db_connection():
     return psycopg2.connect(**DB_SETTINGS)
 
-# Function to export data to Excel
+
 def export_to_excel(phone_number, month_name=None):
     conn = None
     try:
@@ -86,7 +86,7 @@ def export_to_excel(phone_number, month_name=None):
                     AND s.sls_performed = 1
                     AND s.sls_deleted = 0
                     AND %s IN (c.cstm_phone, c.cstm_phone2, c.cstm_phone3, c.cstm_phone4)
-                    AND dss.sords_name != 'Завершен'  -- Статус "Завершен" bo'lgan yozuvlarni hisobga olmaslik
+                    AND dss.sords_name != 'Завершен'
             """
             params = [phone_number]
 
@@ -118,7 +118,7 @@ def export_to_excel(phone_number, month_name=None):
         if conn:
             conn.close()
 
-# Start handler
+
 async def start_handler(message: Message, state: FSMContext):
     logging.info("Команда старта вызвана.")
     keyboard = ReplyKeyboardMarkup(
@@ -134,12 +134,12 @@ async def start_handler(message: Message, state: FSMContext):
         reply_markup=keyboard
     )
 
-# Register button handler
+
 async def register_button_handler(message: Message, state: FSMContext):
     logging.info("Кнопка '📝 Register' нажата.")
     await message.answer(
         "Пожалуйста, отправьте ваш номер телефона в формате +998XXXXXXXXX.",
-        reply_markup=ReplyKeyboardRemove()  # Убираем клавиатуру
+        reply_markup=ReplyKeyboardRemove()
     )
     await state.set_state(Form.phone_number)
 
@@ -165,7 +165,7 @@ async def phone_number_handler(message: Message, state: FSMContext):
             logging.info(f"Результат запроса: {customer}")
 
             if customer:
-                await state.update_data(phone_number=phone_number)  # Save phone number in state
+                await state.update_data(phone_number=phone_number)
                 await main_menu_handler(message, state)
             else:
                 await message.answer(f"Ваш номер телефона {phone_number} не найден в базе данных. Пожалуйста, убедитесь, что вы зарегистрированы.")
@@ -178,7 +178,7 @@ async def phone_number_handler(message: Message, state: FSMContext):
         if conn:
             conn.close()
 
-# Main menu handler
+
 async def main_menu_handler(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -190,7 +190,7 @@ async def main_menu_handler(message: Message, state: FSMContext):
     )
     await message.answer("Выберите действие:", reply_markup=keyboard)
 
-# Накладные button handler
+
 async def nakladnaya_button_handler(message: Message, state: FSMContext):
     logging.info("Кнопка '📦 Накладные' нажата.")
     user_data = await state.get_data()
@@ -201,19 +201,17 @@ async def nakladnaya_button_handler(message: Message, state: FSMContext):
         await state.set_state(Form.phone_number)
         return
 
-    # Arrange months in a 3x4 grid
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=months[i]), KeyboardButton(text=months[i+1]), KeyboardButton(text=months[i+2])]
             for i in range(0, len(months), 3)
-        ] + [[KeyboardButton(text="🏠 Главная")]],  # Добавляем кнопку "Главная"
+        ] + [[KeyboardButton(text="🏠 Главная")]],
         resize_keyboard=True,
         one_time_keyboard=True
     )
     await message.answer("Выберите месяц:", reply_markup=keyboard)
     await state.set_state(Form.month)
 
-# Month handler
 async def month_handler(message: Message, state: FSMContext):
     user_data = await state.get_data()
     phone_number = user_data.get("phone_number")
@@ -237,10 +235,8 @@ async def month_handler(message: Message, state: FSMContext):
         await message.reply(
             f"Данные за месяц {month_name} не найдены. Пожалуйста, убедитесь, что есть данные за выбранный месяц или проверьте вашу базу данных."
         )
-    # State ni tozalashni cheklash
-    await state.set_state(Form.month)  # State ni o'zgartirmasdan qoldiramiz
+    await state.set_state(Form.month)
 
-# Contact handler
 async def contact_handler(message: Message):
     logging.info("Кнопка '📞 Контакт' нажата.")
     contact_info = (
@@ -253,7 +249,6 @@ async def contact_handler(message: Message):
     )
     await message.answer(contact_info)
 
-# Help handler
 async def help_handler(message: Message):
     logging.info("Команда помощи вызвана.")
     await message.answer(
@@ -264,7 +259,6 @@ async def help_handler(message: Message):
         "Вы также можете отправить свой номер телефона для регистрации."
     )
 
-# Main start function
 async def start():
     try:
         logging.info("Запуск бота...")
@@ -274,9 +268,9 @@ async def start():
         ])
         dp.message.register(start_handler, Command("start"))
         dp.message.register(help_handler, Command("help"))
-        dp.message.register(register_button_handler, F.text == "📝 Register")  # Обработка кнопки "📝 Register"
-        dp.message.register(nakladnaya_button_handler, F.text == "📦 Накладные")  # Обработка кнопки "📦 Накладные"
-        dp.message.register(contact_handler, F.text == "📞 Контакт")  # Обработка кнопки "📞 Контакт"
+        dp.message.register(register_button_handler, F.text == "📝 Register")
+        dp.message.register(nakladnaya_button_handler, F.text == "📦 Накладные")
+        dp.message.register(contact_handler, F.text == "📞 Контакт")
         dp.message.register(phone_number_handler, F.text.startswith("+998") | F.text.startswith("998"))
         dp.message.register(month_handler, F.text.in_(months + ["🏠 Главная"]))
         await dp.start_polling(bot)
