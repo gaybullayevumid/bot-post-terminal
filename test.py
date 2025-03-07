@@ -124,7 +124,7 @@ async def start_handler(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📝 Register"), KeyboardButton(text="📦 Накладные")],
-            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="📞 Контакт")]
+            [KeyboardButton(text="📞 Контакт")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
@@ -183,7 +183,7 @@ async def main_menu_handler(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📝 Register"), KeyboardButton(text="📦 Накладные")],
-            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="📞 Контакт")]
+            [KeyboardButton(text="📞 Контакт")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True

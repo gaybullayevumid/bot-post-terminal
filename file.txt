@@ -1,0 +1,3 @@
+Bot tokenni yarishirish kerak
+Admin bolishi kerak hamma qarzi borlarni korib turishi uchun
+Telefon raqam yuboradigan button qoshish kerak
