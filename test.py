@@ -107,7 +107,7 @@ def export_to_excel(phone_number, month_name=None):
             df = pd.DataFrame(products, columns=['Магазин/Склад', 'Код', 'Номенклатура', 'Дата/Время', 'Тип', 'Количество', 'Цена', 'Сумма', 'Статус оплаты'])
             df["Дата/Время"] = pd.to_datetime(df["Дата/Время"]).dt.tz_localize(None)
 
-            file_path = f"invoice_{month_name.lower()}.xlsx" if month_name else "invoice.xlsx"
+            file_path = f"накладные_{month_name.lower()}.xlsx" if month_name else "накладные.xlsx"
             df.to_excel(file_path, index=False)
             logging.info(f"Файл создан: {file_path}")
             return file_path
@@ -121,8 +121,24 @@ def export_to_excel(phone_number, month_name=None):
 # Start handler
 async def start_handler(message: Message, state: FSMContext):
     logging.info("Команда старта вызвана.")
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📝 Register"), KeyboardButton(text="📦 Накладные")],
+            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="📞 Контакт")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
     await message.answer(
-        "Добро пожаловать! Пожалуйста, отправьте ваш номер телефона в формате +998XXXXXXXXX.",
+        "Добро пожаловать! Пожалуйста, выберите действие:",
+        reply_markup=keyboard
+    )
+
+# Register button handler
+async def register_button_handler(message: Message, state: FSMContext):
+    logging.info("Кнопка '📝 Register' нажата.")
+    await message.answer(
+        "Пожалуйста, отправьте ваш номер телефона в формате +998XXXXXXXXX.",
         reply_markup=ReplyKeyboardRemove()  # Убираем клавиатуру
     )
     await state.set_state(Form.phone_number)
@@ -166,8 +182,8 @@ async def phone_number_handler(message: Message, state: FSMContext):
 async def main_menu_handler(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Накладные")],
-            [KeyboardButton(text="Помощь")]
+            [KeyboardButton(text="📝 Register"), KeyboardButton(text="📦 Накладные")],
+            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="📞 Контакт")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
@@ -176,7 +192,7 @@ async def main_menu_handler(message: Message, state: FSMContext):
 
 # Накладные button handler
 async def nakladnaya_button_handler(message: Message, state: FSMContext):
-    logging.info("Кнопка 'Накладные' нажата.")
+    logging.info("Кнопка '📦 Накладные' нажата.")
     user_data = await state.get_data()
     phone_number = user_data.get("phone_number")
 
@@ -190,13 +206,12 @@ async def nakladnaya_button_handler(message: Message, state: FSMContext):
         keyboard=[
             [KeyboardButton(text=months[i]), KeyboardButton(text=months[i+1]), KeyboardButton(text=months[i+2])]
             for i in range(0, len(months), 3)
-        ] + [[KeyboardButton(text="Главная")]],  # Добавляем кнопку "Главная"
+        ] + [[KeyboardButton(text="🏠 Главная")]],  # Добавляем кнопку "Главная"
         resize_keyboard=True,
         one_time_keyboard=True
     )
     await message.answer("Выберите месяц:", reply_markup=keyboard)
     await state.set_state(Form.month)
-
 
 # Month handler
 async def month_handler(message: Message, state: FSMContext):
@@ -204,7 +219,7 @@ async def month_handler(message: Message, state: FSMContext):
     phone_number = user_data.get("phone_number")
     month_name = message.text
 
-    if month_name == "Главная":
+    if month_name == "🏠 Главная":
         await message.answer("Вы вернулись в главное меню.", reply_markup=ReplyKeyboardRemove())
         await main_menu_handler(message, state)
         return
@@ -224,6 +239,19 @@ async def month_handler(message: Message, state: FSMContext):
         )
     # State ni tozalashni cheklash
     await state.set_state(Form.month)  # State ni o'zgartirmasdan qoldiramiz
+
+# Contact handler
+async def contact_handler(message: Message):
+    logging.info("Кнопка '📞 Контакт' нажата.")
+    contact_info = (
+        "🏢 Название компании: Пример Компании\n"
+        "📍 Адрес: Навои, Узбекистан\n"
+        "📞 Телефон: +998930850955\n"
+        "🌐 Веб-сайт: www.example.com\n"
+        "📧 Электронная почта: info@example.com\n"
+        "📝 Описание: Мы являемся ведущей компанией в отрасли, предоставляющей высококачественные услуги и продукты."
+    )
+    await message.answer(contact_info)
 
 # Help handler
 async def help_handler(message: Message):
@@ -246,9 +274,11 @@ async def start():
         ])
         dp.message.register(start_handler, Command("start"))
         dp.message.register(help_handler, Command("help"))
-        dp.message.register(nakladnaya_button_handler, F.text == "Накладные")  # Обработка кнопки "Накладные"
+        dp.message.register(register_button_handler, F.text == "📝 Register")  # Обработка кнопки "📝 Register"
+        dp.message.register(nakladnaya_button_handler, F.text == "📦 Накладные")  # Обработка кнопки "📦 Накладные"
+        dp.message.register(contact_handler, F.text == "📞 Контакт")  # Обработка кнопки "📞 Контакт"
         dp.message.register(phone_number_handler, F.text.startswith("+998") | F.text.startswith("998"))
-        dp.message.register(month_handler, F.text.in_(months + ["Главная"]))
+        dp.message.register(month_handler, F.text.in_(months + ["🏠 Главная"]))
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
