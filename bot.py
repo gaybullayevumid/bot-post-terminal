@@ -1,4 +1,5 @@
 import logging
+import os
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import BotCommand, Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
@@ -8,37 +9,33 @@ from asyncio import run
 import pandas as pd
 import psycopg2
 from psycopg2.extras import DictCursor
+from dotenv import load_dotenv
 
+load_dotenv()
 
 DB_SETTINGS = {
-    'dbname': 'avtolider',
-    'user': 'postgres',
-    'password': '8505',
-    'host': 'localhost',
-    'port': 5432
+    'dbname': os.getenv('DB_NAME'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'host': os.getenv('DB_HOST'),
+    'port': os.getenv('DB_PORT')
 }
 
-
-BOT_TOKEN = "7769778979:AAFNG8nuj0m2rbWbJFHz8Jb2-FHS_Bv5qIc"
-
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
 
 months = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
 ]
 
-
 class Form(StatesGroup):
     phone_number = State()
     month = State()
-
 
 def phone_number_format(phone_number):
     phone_number = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
@@ -48,10 +45,8 @@ def phone_number_format(phone_number):
         phone_number = phone_number[1:]
     return phone_number
 
-
 def get_db_connection():
     return psycopg2.connect(**DB_SETTINGS)
-
 
 def export_to_excel(phone_number, month_name=None):
     conn = None
@@ -118,7 +113,6 @@ def export_to_excel(phone_number, month_name=None):
         if conn:
             conn.close()
 
-
 async def start_handler(message: Message, state: FSMContext):
     logging.info("Команда старта вызвана.")
     keyboard = ReplyKeyboardMarkup(
@@ -134,7 +128,6 @@ async def start_handler(message: Message, state: FSMContext):
         reply_markup=keyboard
     )
 
-
 async def register_button_handler(message: Message, state: FSMContext):
     logging.info("Кнопка '📝 Register' нажата.")
     await message.answer(
@@ -143,7 +136,6 @@ async def register_button_handler(message: Message, state: FSMContext):
     )
     await state.set_state(Form.phone_number)
 
-# Phone number handler
 async def phone_number_handler(message: Message, state: FSMContext):
     phone_number = phone_number_format(message.text)
     logging.info(f"Получен номер телефона: {phone_number}")
@@ -170,14 +162,13 @@ async def phone_number_handler(message: Message, state: FSMContext):
             else:
                 await message.answer(f"Ваш номер телефона {phone_number} не найден в базе данных. Пожалуйста, убедитесь, что вы зарегистрированы.")
                 await state.clear()
-    except Exception as e:
+    except psycopg2.Error as e:
         logging.error(f"Ошибка при проверке клиента: {e}")
         await message.answer("Произошла ошибка при проверке номера телефона. Пожалуйста, попробуйте позже.")
         await state.clear()
     finally:
         if conn:
             conn.close()
-
 
 async def main_menu_handler(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(
@@ -189,7 +180,6 @@ async def main_menu_handler(message: Message, state: FSMContext):
         one_time_keyboard=True
     )
     await message.answer("Выберите действие:", reply_markup=keyboard)
-
 
 async def nakladnaya_button_handler(message: Message, state: FSMContext):
     logging.info("Кнопка '📦 Накладные' нажата.")
