@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import BotCommand, Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
@@ -45,13 +46,19 @@ def phone_number_format(phone_number):
         phone_number = phone_number[1:]
     return phone_number
 
-def get_db_connection():
-    return psycopg2.connect(**DB_SETTINGS)
+async def get_db_connection():
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: psycopg2.connect(**DB_SETTINGS))
 
-def export_to_excel(phone_number, month_name=None):
+async def run_query(cursor, query, params):
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, cursor.execute, query, params)
+    return await loop.run_in_executor(None, cursor.fetchall)
+
+async def export_to_excel(phone_number, month_name=None):
     conn = None
     try:
-        conn = get_db_connection()
+        conn = await get_db_connection()
         with conn.cursor(cursor_factory=DictCursor) as cursor:
             query = """
                 SELECT
@@ -92,14 +99,14 @@ def export_to_excel(phone_number, month_name=None):
 
             query += " ORDER BY s.sls_datetime"
             logging.info(f"Executing query: {query} with params: {params}")
-            cursor.execute(query, params)
-            products = cursor.fetchall()
+            products = await run_query(cursor, query, params)
 
             if not products:
                 logging.warning(f"Данные для номера телефона {phone_number} за месяц {month_name} не найдены")
                 return None
 
-            df = pd.DataFrame(products, columns=['Магазин/Склад', 'Код', 'Номенклатура', 'Дата/Время', 'Тип', 'Количество', 'Цена', 'Сумма', 'Статус оплаты'])
+            df = pd.DataFrame(products)
+            df.columns = ['Магазин/Склад', 'Код', 'Номенклатура', 'Дата/Время', 'Тип', 'Количество', 'Цена', 'Сумма', 'Статус оплаты']
             df["Дата/Время"] = pd.to_datetime(df["Дата/Время"]).dt.tz_localize(None)
 
             file_path = f"накладные_{month_name.lower()}.xlsx" if month_name else "накладные.xlsx"
@@ -146,10 +153,11 @@ async def phone_number_handler(message: Message, state: FSMContext):
 
     conn = None
     try:
-        conn = get_db_connection()
+        conn = await get_db_connection()
+        loop = asyncio.get_event_loop()
         with conn.cursor(cursor_factory=DictCursor) as cursor:
             logging.info(f"Проверка номера телефона в базе данных: {phone_number}")
-            cursor.execute("""
+            await loop.run_in_executor(None, cursor.execute, """
                 SELECT * FROM dir_customers c
                 WHERE %s IN (c.cstm_phone, c.cstm_phone2, c.cstm_phone3, c.cstm_phone4)
             """, (phone_number,))
@@ -217,7 +225,7 @@ async def month_handler(message: Message, state: FSMContext):
         await state.set_state(Form.phone_number)
         return
 
-    file_path = export_to_excel(phone_number, month_name)
+    file_path = await export_to_excel(phone_number, month_name)
     if file_path:
         excel_file = FSInputFile(file_path)
         await message.answer_document(excel_file, caption=f"Данные за месяц {month_name}.")
